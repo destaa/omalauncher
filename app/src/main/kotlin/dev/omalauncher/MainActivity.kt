@@ -2,6 +2,10 @@ package dev.omalauncher
 
 import android.app.ActivityManager
 import android.app.role.RoleManager
+import android.os.Build
+import android.os.Environment
+import android.provider.Settings
+import android.net.Uri
 import android.content.Intent
 import android.os.Bundle
 import android.util.Log
@@ -43,6 +47,18 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             snapshotFlow { runtime.launcherReady }.first { it }
             withResumed { requestHomeRole() }
+            withResumed { requestStorageAccess() }
+        }
+    }
+
+    /** Asks once for all files access. */
+    private fun requestStorageAccess() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (!Environment.isExternalStorageManager()) {
+                val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
+                intent.data = Uri.parse("package:$packageName")
+                startActivity(intent)
+            }
         }
     }
 
