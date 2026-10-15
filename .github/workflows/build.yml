@@ -12,6 +12,10 @@ jobs:
           distribution: 'temurin'
       - name: Setup Android SDK
         uses: android-actions/setup-android@v4
+      - name: Install bsdtar
+        run: sudo apt-get update && sudo apt-get install -y bsdtar
+      - name: Fetch proot
+        run: ./scripts/fetch-proot.sh
       - name: Grant execute permission
         run: chmod +x gradlew
       - name: Build with Gradle
