@@ -6,7 +6,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -19,7 +21,6 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.TextUnit
@@ -96,18 +97,22 @@ internal fun ShortcutRows(
     if (offered.isEmpty()) return
     Column {
         for (s in offered) {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .clickable {
-                        onDismiss()
-                        menu.open(s)
-                    }.padding(start = 14.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                ShortcutIcon(s)
-                BasicText(s.label, Modifier.weight(1f), style = Mono.copy(fontSize = fontSize), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            // The + beside the row rather than in it, so keys reach both: Right goes from one to the other.
+            Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).padding(end = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .clickable {
+                            onDismiss()
+                            menu.open(s)
+                        }.padding(start = 14.dp, end = 10.dp, top = 4.dp, bottom = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    ShortcutIcon(s)
+                    BasicText(s.label, Modifier.weight(1f), style = Mono.copy(fontSize = fontSize), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
                 BracketAction("+", Palette.accent) {
                     onDismiss()
                     menu.pin(s)
@@ -127,7 +132,7 @@ private fun ShortcutIcon(s: OfferedShortcut) {
     when {
         bmp != null -> Image(bmp, null, Modifier.size(size), colorFilter = if (mono) ColorFilter.tint(Palette.accent) else null)
         else ->
-            Box(Modifier.size(size).clip(LauncherStyle.shape(size / 2)).background(Palette.background), contentAlignment = Alignment.Center) {
+            IconBadge(size, Palette.background) {
                 BasicText(initials(s.label), style = Mono.copy(color = Palette.accent, fontSize = TextSize.Small))
             }
     }

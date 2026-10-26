@@ -180,7 +180,7 @@ class AndroidAppCatalog(
     /** Names by [AndroidApp.key] and [AndroidShortcut.key], in the phone's language now; home's tiles go by these. */
     val labels by derivedStateOf { apps.associate { it.key to it.label } + shortcuts.associate { it.key to it.label } }
 
-    private val byKey by derivedStateOf { apps.associateBy { it.key } }
+    internal val byKey by derivedStateOf { apps.associateBy { it.key } }
 
     /**
      * The app a home tile pinned as [component] in [profile] opens now. Apps that let you pick another icon (Duolingo,
@@ -222,6 +222,13 @@ class AndroidAppCatalog(
 
     /** Whether the last load could list [shortcuts]: only while this is the default home app. Long-press menus offer app shortcuts only then too. */
     var listsShortcuts by mutableStateOf(false)
+        private set
+
+    /** Keys of the apps whose icons are drawn first, ahead of the alphabet: the ones showing as the launcher starts. */
+    var iconsFirst: () -> Set<String> = { emptySet() }
+
+    /** Whether the apps have been listed once; until then [apps] is empty because nothing was asked yet, not because there are none. */
+    var listed by mutableStateOf(false)
         private set
 
     /** Icon edge in px: the drawer's 52dp icon at this screen's density. */
@@ -542,10 +549,14 @@ class AndroidAppCatalog(
                     shortcuts.clear()
                     shortcuts += pinned
                 }
+                this@AndroidAppCatalog.listed = true
                 val present = (list.map { it.key } + pinned.map { it.key }).toHashSet()
                 icons.keys.retainAll(present)
                 masks.keys.retainAll(present)
-                for ((info, app) in infos) {
+                // Started in this order, and they run four at a time: with hundreds of apps, the recent strip's would
+                // otherwise wait their turn in the alphabet.
+                val first = iconsFirst()
+                for ((info, app) in infos.sortedBy { it.second.key !in first }) {
                     if (app.key !in icons) loadIcon(app.key, app.profile, app.clone) { info.getIcon(0) }
                 }
                 // Apps change a shortcut's icon without an update, so these are drawn again each time; there are only a few.

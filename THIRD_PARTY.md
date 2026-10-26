@@ -33,11 +33,22 @@ agent in the launcher, which is not affiliated with or endorsed by any of them.
 [Nerd Fonts](https://www.nerdfonts.com) (MIT), [Weather Icons](https://erikflowers.github.io/weather-icons/)
 (SIL OFL 1.1) and [Material Design Icons](https://pictogrammers.com/library/mdi/) (Apache-2.0).
 
+`app/src/main/res/font/noto_symbols.ttf`: a subset of [Noto Sans Symbols 2](https://github.com/notofonts/symbols)
+(SIL OFL 1.1), Copyright 2022 The Noto Project Authors.
+
 ## Omarchy themes
 
 `app/src/main/assets/themes/*.toml` and `app/src/main/assets/theme-backgrounds.txt`
 come from [Omarchy](https://github.com/omacom/omarchy), MIT, Copyright (c) David Heinemeier Hansson.
 Omalauncher is not affiliated with Omarchy.
+
+## Mesa
+
+`app/src/main/assets/mesa-zink/mesa-zink.tar.xz`: [Mesa](https://mesa3d.org) 26.2.4 with
+`scripts/mesa/0001-egl-wayland-keep-zink-on-shm.patch`, built by `scripts/mesa/build-aarch64.sh`.
+Mesa is mostly MIT, with other files under the permissive licenses in its `licenses/` directory.
+The archive also carries [wayland-protocols](https://gitlab.freedesktop.org/wayland/wayland-protocols) (MIT).
+It is installed into the Linux guest when GPU acceleration is turned on for an Adreno GPU.
 
 ## Bundled at build time
 

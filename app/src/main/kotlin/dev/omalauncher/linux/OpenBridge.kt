@@ -1,11 +1,9 @@
 package dev.omalauncher.linux
 
-import android.content.ActivityNotFoundException
 import android.content.Context
-import android.content.Intent
-import android.net.Uri
 import android.system.Os
 import android.util.Log
+import dev.omalauncher.openUrl
 import dev.omalauncher.upgrade.Managed
 import dev.omalauncher.upgrade.Policy
 import java.io.File
@@ -35,15 +33,16 @@ class OpenBridge(
         if (started) return
         started = true
         fifo.delete()
-        Os.mkfifo(fifo.path, 0x180) // 0600
         thread(name = "open-bridge", isDaemon = true) {
             while (true) {
                 // Each writer closes the FIFO after one URL; reopen for the next.
                 try {
+                    if (!fifo.exists()) Os.mkfifo(fifo.path, 0x180) // 0600
                     fifo.bufferedReader().useLines { lines -> lines.forEach(::open) }
                 } catch (e: Exception) {
-                    Log.e(TAG, "bridge stopped", e)
-                    return@thread
+                    // One bad request or a removed FIFO mustn't stop xdg-open until the next app start.
+                    Log.w(TAG, "bridge failed; retrying", e)
+                    Thread.sleep(1000)
                 }
             }
         }
@@ -56,17 +55,13 @@ class OpenBridge(
         // Written by the omarchy-edit shim: its reply FIFO (no spaces, made by mktemp) and the file.
         if (url.startsWith(EDIT_PREFIX)) {
             val (reply, path) = url.removePrefix(EDIT_PREFIX).split(' ', limit = 2).takeIf { it.size == 2 } ?: return
-            return onEdit(path, proot.hostFile(reply).path)
+            return onEdit(path, proot.guestFile(reply)?.path ?: return)
         }
         if (!url.startsWith("http://") && !url.startsWith("https://")) {
             Log.i(TAG, "ignoring non-URL $url")
             return
         }
-        try {
-            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        } catch (e: ActivityNotFoundException) {
-            Log.w(TAG, "no browser for $url")
-        }
+        if (!context.openUrl(url)) Log.w(TAG, "no browser for $url")
     }
 
     /** The shims; /usr/local/bin precedes /usr/bin, so xdg-open wins over xdg-utils if that's installed. */

@@ -1,7 +1,6 @@
 package dev.omalauncher.ui
 
 import android.content.Context
-import android.view.HapticFeedbackConstants
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
@@ -10,7 +9,6 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -49,7 +47,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
@@ -58,10 +55,8 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.layout
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.drawText
@@ -75,7 +70,6 @@ import dev.omalauncher.Runtime
 import dev.omalauncher.linux.GuestFs
 import dev.omalauncher.linux.shellQuote
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -117,7 +111,7 @@ fun EditorScreen(
     onExit: () -> Unit,
 ) {
     val context = LocalContext.current
-    val fs = remember { GuestFs(runtime.proot::hostFile) }
+    val fs = runtime.proot.guestFs
     val loaded by produceState<Result<EditorFile>?>(null, path) {
         value = withContext(Dispatchers.IO) { runCatching { readEditorFile(fs.host(path)) } }
     }
@@ -220,7 +214,8 @@ private fun EditorBody(
         if (query != null) closeFind() else close()
     }
 
-    Column(Modifier.fillMaxSize().background(Palette.background).safeDrawingPadding().padding(PanelGap)) {
+    // Keys start in the text, to type; Shift+Tab goes back up to the header.
+    Column(Modifier.fillMaxSize().background(Palette.background).safeDrawingPadding().padding(PanelGap).holdsKeys(start = editorFocus)) {
         val q = query
         PanelFrame(
             onClose = { if (q != null) closeFind() else close() },
@@ -242,7 +237,7 @@ private fun EditorBody(
                         cursorBrush = SolidColor(Palette.accent),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search, autoCorrectEnabled = false),
                         keyboardActions = KeyboardActions(onSearch = { find() }),
-                        modifier = Modifier.fillMaxWidth().focusRequester(focus),
+                        modifier = Modifier.fillMaxWidth().focusRequester(focus).leavesUpDown(),
                         decorationBox = { inner ->
                             Box {
                                 if (q.isEmpty()) BasicText("find in file", style = Mono.copy(color = Palette.muted, fontSize = TextSize.Title))
@@ -335,7 +330,9 @@ private fun EditorBody(
     }
 
     if (confirmClose) {
-        DialogFrame(onDismiss = { confirmClose = false }) {
+        // Keys start on save: Enter right away shouldn't throw the changes away.
+        val saveFocus = remember { FocusRequester() }
+        DialogFrame(onDismiss = { confirmClose = false }, start = saveFocus) {
             BasicText("save $name?", style = Mono.copy(fontSize = TextSize.Title))
             BasicText("You have changes that aren't saved yet.", style = Mono.copy(color = Palette.muted))
             // Cancel is a tap outside or back; three actions don't fit a phone's dialog.
@@ -344,9 +341,11 @@ private fun EditorBody(
                     confirmClose = false
                     onExit()
                 }
-                BracketAction("save", Palette.accent) {
-                    confirmClose = false
-                    scope.launch { if (save()) onExit() }
+                Box(Modifier.focusRequester(saveFocus)) {
+                    BracketAction("save", Palette.accent) {
+                        confirmClose = false
+                        scope.launch { if (save()) onExit() }
+                    }
                 }
             }
         }
@@ -494,45 +493,7 @@ private fun EditorKeys(
             .padding(KeyGap)
             .height(KeyRowHeight),
     ) {
-        for (key in keys) EditorKeyCap(key, Modifier.weight(1f).fillMaxHeight().padding(KeyGap))
-    }
-}
-
-@Composable
-private fun EditorKeyCap(
-    key: EditorKey,
-    modifier: Modifier,
-) {
-    val view = LocalView.current
-    var pressed by remember { mutableStateOf(false) }
-    KeyCap(
-        modifier.pointerInput(key.label) {
-            presses { scope ->
-                pressed = true
-                view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                val press =
-                    scope.launch {
-                        key.action()
-                        if (!key.repeats) return@launch
-                        delay(RepeatDelay)
-                        while (true) {
-                            key.action()
-                            delay(RepeatInterval)
-                        }
-                    }
-                waitForUpOrCancellation()
-                press.cancel()
-                pressed = false
-            }
-        },
-        fill = if (pressed) Palette.accent else Palette.surface,
-    ) {
-        val color = if (pressed) Palette.background else Palette.foreground
-        if (key.icon != null) {
-            Image(key.icon, key.label, Modifier.size(20.dp).rotate(key.rotation), colorFilter = ColorFilter.tint(color))
-        } else {
-            BasicText(key.label, style = Mono.copy(color = color), maxLines = 1)
-        }
+        for (key in keys) RepeatingKeyCap(key.label, key.icon, key.rotation, key.repeats, Modifier.weight(1f).fillMaxHeight().padding(KeyGap), key.action)
     }
 }
 
@@ -546,9 +507,9 @@ fun EditorHome(
     onExit: () -> Unit,
 ) {
     val context = LocalContext.current
-    val fs = remember { GuestFs(runtime.proot::hostFile) }
+    val fs = runtime.proot.guestFs
     val recent by produceState(emptyList<String>()) {
-        value = withContext(Dispatchers.IO) { EditorPrefs(context).recent.filter { fs.host(it).isFile } }
+        value = withContext(Dispatchers.IO) { EditorPrefs(context).recent.filter { runCatching { fs.host(it).isFile }.getOrDefault(false) } }
     }
     var newFile by remember { mutableStateOf(false) }
 
@@ -558,9 +519,13 @@ fun EditorHome(
     }
 
     BackHandler(onBack = onExit)
+    // Keys start on the close mark, as in the launcher's panels.
+    val close = remember { FocusRequester() }
     Box(Modifier.fillMaxSize().background(Palette.background).safeDrawingPadding().padding(PanelGap)) {
         PanelFrame(
             onClose = onExit,
+            modifier = Modifier.holdsKeys(start = close),
+            closeFocus = close,
             title = { PanelTitle("editor") },
             actions = {
                 BracketAction("new", Palette.accent) { newFile = true }

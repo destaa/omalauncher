@@ -33,7 +33,7 @@ class StyleTest {
     }
 
     @Test fun reportsTheLineItCantRead() {
-        for ((text, line) in listOf("a = 1\nb = nord" to 2, "[home\n" to 1, "a = [1, 2]" to 1, "a = 1\na = 2" to 2, "a = \"open" to 1, "\"my key\" = 1" to 1, "[\"a.b\"]" to 1)) {
+        for ((text, line) in listOf("a = 1\nb = nord" to 2, "[home\n" to 1, "a = [1, 2" to 1, "a = { b = 1" to 1, "a = 1\na = 2" to 2, "a = \"open" to 1, "\"my key\" = 1" to 1, "[\"a.b\"]" to 1)) {
             try {
                 Toml.parse(text)
                 fail("parsed: $text")
@@ -109,6 +109,39 @@ class StyleTest {
         assertEquals(emptyList<String>(), decoded.problems)
         // No borders is a width of 0, not a color.
         assertEquals(2, StyleFile.decode(mapOf("widgets.border" to "none", "widgets.border-focused" to "none")).problems.size)
+    }
+
+    @Test fun columnsAreAWholeNumberFromFourToNine() {
+        assertEquals(6, Style()[Style.COLUMNS])
+        val five = Toml.parse("[home]\ncolumns = 5\n")
+        assertEquals(5, StyleFile.decode(five).style[Style.COLUMNS])
+        assertEquals("version = 1\n\n[home]\ncolumns = 5\n", Toml.write(StyleFile.encode(five, Style().with(Style.COLUMNS, 5)), ""))
+        for (bad in listOf(5.5, 3.0, 10.0)) {
+            val decoded = StyleFile.decode(mapOf("home.columns" to bad), Style().with(Style.COLUMNS, 5))
+            assertEquals(5, decoded.style[Style.COLUMNS])
+            assertEquals(listOf("home.columns: takes a whole number from 4 to 9; keeping 5"), decoded.problems)
+        }
+    }
+
+    @Test fun widgetsOpacityAndFrost() {
+        // A file from before them: the glass as it always was, no frost.
+        assertEquals(Style.GLASS, StyleFile.decode(Toml.parse("[widgets]\ngaps-in = 3\n")).style[Style.TILE_OPACITY], 0.0)
+        assertEquals(false, Style()[Style.TILE_FROST])
+        val t = Toml.parse("[widgets]\nopacity = 0.6\nfrost = true\n")
+        val decoded = StyleFile.decode(t)
+        assertEquals(0.6, decoded.style[Style.TILE_OPACITY], 0.0)
+        assertEquals(true, decoded.style[Style.TILE_FROST])
+        assertEquals(emptyList<String>(), decoded.problems)
+        // A whole number is a number too: solid.
+        assertEquals(1.0, StyleFile.decode(Toml.parse("[widgets]\nopacity = 1\n")).style[Style.TILE_OPACITY], 0.0)
+        assertEquals("version = 1\n\n[widgets]\nopacity = 0.6\nfrost = true\n", Toml.write(StyleFile.encode(t, decoded.style), ""))
+        // Bad values keep the previous ones; the bars' bands keep their own opacity.
+        val previous = Style().with(Style.TILE_OPACITY, 0.7)
+        val bad = StyleFile.decode(mapOf("widgets.opacity" to 1.5, "widgets.frost" to "yes"), previous)
+        assertEquals(0.7, bad.style[Style.TILE_OPACITY], 0.0)
+        assertEquals(false, bad.style[Style.TILE_FROST])
+        assertEquals(listOf("widgets.opacity", "widgets.frost"), bad.problems.map { it.substringBefore(':') })
+        assertEquals(Style.GLASS, decoded.style[Style.STATUS_BAR.opacity], 0.0)
     }
 
     @Test fun absentKeysAreDefaultsNotThePreviousValues() {

@@ -46,6 +46,19 @@ sealed class Setting<T>(
         override fun decode(value: Any): String? = nonBlank(value, "takes a name in quotes")
     }
 
+    class Count(
+        key: String,
+        default: Int,
+        val range: IntRange,
+        doc: String,
+    ) : Setting<Int>(key, default, doc) {
+        override fun decode(value: Any): Int {
+            val v = value as? Double
+            require(v != null && v == Math.rint(v) && v.toInt() in range) { "takes a whole number from ${range.first} to ${range.last}" }
+            return v.toInt()
+        }
+    }
+
     class Text(
         key: String,
         default: String,
@@ -132,7 +145,7 @@ class Style(
     fun changed(other: Style) = StyleFile.ALL.filter { this[it] != other[it] }.map { it.key }.toSet()
 
     companion object {
-        /** How much tiles and the system bars' bands cover the wallpaper. */
+        /** How much tiles and the system bars' bands cover the wallpaper, by default. */
         const val GLASS = 0.88
 
         val THEME = Setting.Name("theme", "The Omarchy theme, by its directory name in ~/.local/share/omarchy/themes or ~/.config/omarchy/themes (yours win).")
@@ -140,9 +153,34 @@ class Style(
 
         val APP_TILES = Setting.Flag("home.app-tiles", true, "Apps on home in a tile like a widget; false draws bare icons on the wallpaper.")
         val RECENT_APPS = Setting.Flag("home.recent-apps", true, "The strip of recently used apps above the prompt bar.")
+        val EMPTY_PAGE_LEFT = Setting.Flag("home.empty-page-left", true, "The empty page left of home's leftmost, inviting a new face; false ends home at its own first page.")
+        val EMPTY_PAGE_RIGHT =
+            Setting.Flag(
+                "home.empty-page-right",
+                true,
+                "The empty page after home's last, for new tiles; false shows it only while a tile is carried, to drop it on.",
+            )
+        val COLUMNS = Setting.Count("home.columns", 6, 4..9, "Columns of home's grid. Fewer make bigger cells, and apps show their names under their icons once a cell is tall enough.")
+        val FORCE_SINGLE_PAGE =
+            Setting.Flag(
+                "home.single-page",
+                false,
+                "One page even on a screen shaped like an unfolded foldable's; false shows two there, auto-detected from the screen's shape and width.",
+            )
 
         val GAPS_IN = Setting.Number("widgets.gaps-in", 6.0, 0.0..24.0, "Space in dp between two of home's widgets (all of it, unlike Hyprland's gaps_in, which each window has on its side).")
         val GAPS_OUT = Setting.Number("widgets.gaps-out", 6.0, 0.0..48.0, "Space in dp from home's widgets, the strip and the prompt bar to the screen's edges.")
+        val TILE_OPACITY =
+            Setting.Number(
+                "widgets.opacity",
+                GLASS,
+                0.0..1.0,
+                "How much widgets, terminal widgets among them, the prompt bar and the rails cover the wallpaper: 0 clear, 1 solid. The system bars' bands have their own.",
+            )
+        val TILE_FROST = Setting.Flag("widgets.frost", false, "The wallpaper behind widgets, the prompt bar and the rails blurred, like frosted glass, under widgets.opacity's tint.")
+
+        /** How much widgets.frost blurs, in dp: owl's frost: 24, as its examples use. */
+        const val TILE_FROST_DP = 24.0
         val TILE_BORDER_WIDTH = Setting.Number("widgets.border-width", 2.0, 0.0..8.0, "How thick widgets' outlines are, in dp. 0 draws none, but the focused one's.")
         val TILE_BORDER = Setting.Color("widgets.border", "The outline of widgets, the prompt bar and the rails: \"theme\" is the theme's border color.")
         val TILE_BORDER_FOCUSED = Setting.Color("widgets.border-focused", "The outline of the widget in use or being arranged: \"theme\" is the theme's accent.")
@@ -150,15 +188,36 @@ class Style(
         val SCREEN_GAPS_OUT = Setting.Number("screens.gaps-out", 6.0, 0.0..48.0, "Space in dp from full-screen panels (settings, style, the stores) to the screen's edges.")
         val SCREEN_BORDER_WIDTH = Setting.Number("screens.border-width", 2.0, 0.0..8.0, "How thick full-screen panels' outlines are, in dp.")
 
+        val KEYBAR_GAPS_OUT = Setting.Number("keybar.gaps-out", 6.0, 0.0..48.0, "Space in dp from the terminal key bar's frame to the screen's sides and the keyboard.")
+        val KEYBAR_BORDER_WIDTH = Setting.Number("keybar.border-width", 2.0, 0.0..8.0, "How thick the terminal key bar's frame is, in dp. 0 draws none.")
+
         val MONOCHROME_ICONS = Setting.Flag("icons.monochrome", false, "App icons as silhouettes in the accent color, as on Omarchy, rather than in their own colors.")
 
         val CORNER_SCALE = Setting.Number("corners.scale", 0.0, 0.0..2.0, "Multiplies every frame's corner radius: 0 square (Omarchy), 0.5 soft, 1 round like stock Android.")
 
         val STATUS_BAR = Bar("status-bar", "Android's status bar at the top of home")
+        val STATUS_BAR_SHOWN = Setting.Flag("status-bar.shown", true, "Android's status bar on home; false hides it until a swipe down from the top edge.")
         val NAVIGATION_BAR = Bar("navigation-bar", "Android's gesture or button bar on home")
 
+        /** [FONT]'s value for Android's own monospace font. */
+        const val SYSTEM_FONT = "system"
+
+        val FONT = Setting.Text("font", SYSTEM_FONT, "The font family of the launcher's text and widgets: \"system\" is Android's monospace; fc-list :spacing=100 lists those Linux has.")
         val TERMINAL_FONT = Setting.Text("terminal.font", "JetBrains Mono", "The terminals' font family; fc-list :spacing=100 lists those installed.")
         val TERMINAL_TEXT = Setting.Number("terminal.text", 12.0, 6.0..32.0, "The terminals' em size in dp, before Android's font size: 10 smaller, 12 default, 14 larger.")
+
+        val SWIPE_UP =
+            Setting.Text(
+                "gestures.swipe-up",
+                "drawer.owl",
+                "The app drawer, which swiping up opens: a panel's file name in ~/.config/omalauncher/widgets, by default drawer.owl; \"none\" leaves only tapping the bar to open drawer.owl. One that's gone or doesn't compile falls back to drawer.owl, then to .stock-drawer.owl, the drawer as it ships.",
+            )
+        val SWIPE_DOWN =
+            Setting.Text(
+                "gestures.swipe-down",
+                "none",
+                "What swiping down on home opens: \"none\" nothing, or a panel's file name in ~/.config/omalauncher/widgets (\"my-panel.owl\"); one that's gone or doesn't compile opens nothing.",
+            )
     }
 
     /** A system bar's band on home; [name] is its section in the file. */
@@ -169,7 +228,7 @@ class Style(
     ) {
         val framed = Setting.Flag("$name.framed", false, "$what on a band of the tiles' glass; false leaves the bare wallpaper.")
         val background = Setting.Color("$name.background", "The band's color: \"theme\" is the theme's background, like the tiles.")
-        val opacity = Setting.Number("$name.opacity", GLASS, 0.0..1.0, "How much the band covers the wallpaper: ${Toml.format(GLASS)} like the tiles, 1 solid.")
+        val opacity = Setting.Number("$name.opacity", GLASS, 0.0..1.0, "How much the band covers the wallpaper: ${Toml.format(GLASS)} like the tiles by default (widgets.opacity), 1 solid.")
         val border = Setting.Color("$name.border", "The line on the band's side facing the widgets: \"theme\" follows widgets.border.", noneAllowed = true)
         val borderWidth = Setting.Number("$name.border-width", 2.0, 0.0..8.0, "How thick that line is, in dp; 0 draws none.")
         val all = listOf(framed, background, opacity, border, borderWidth)
@@ -197,9 +256,9 @@ object StyleFile {
 
     val ALL: List<Setting<*>> =
         with(Style) {
-            listOf(THEME, BACKGROUND, APP_TILES, RECENT_APPS, GAPS_IN, GAPS_OUT, TILE_BORDER_WIDTH, TILE_BORDER, TILE_BORDER_FOCUSED) +
-                listOf(SCREEN_GAPS_OUT, SCREEN_BORDER_WIDTH, MONOCHROME_ICONS, CORNER_SCALE) +
-                STATUS_BAR.all + NAVIGATION_BAR.all + listOf(TERMINAL_FONT, TERMINAL_TEXT)
+            listOf(THEME, BACKGROUND, FONT, APP_TILES, RECENT_APPS, EMPTY_PAGE_LEFT, EMPTY_PAGE_RIGHT, COLUMNS, FORCE_SINGLE_PAGE, GAPS_IN, GAPS_OUT, TILE_OPACITY, TILE_FROST, TILE_BORDER_WIDTH, TILE_BORDER, TILE_BORDER_FOCUSED) +
+                listOf(SCREEN_GAPS_OUT, SCREEN_BORDER_WIDTH, KEYBAR_GAPS_OUT, KEYBAR_BORDER_WIDTH, MONOCHROME_ICONS, CORNER_SCALE) +
+                listOf(STATUS_BAR_SHOWN) + STATUS_BAR.all + NAVIGATION_BAR.all + listOf(TERMINAL_FONT, TERMINAL_TEXT, SWIPE_UP, SWIPE_DOWN)
         }
 
     private val byKey = ALL.associateBy { it.key }
