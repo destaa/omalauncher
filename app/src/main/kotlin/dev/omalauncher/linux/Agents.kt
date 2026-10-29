@@ -135,6 +135,19 @@ fun agentInvocation(
     }
 }
 
+/**
+ * Removes an agent's mise package, its shim and what's left of its install.
+ *
+ * `mise unuse` drops the package from the config and `mise prune` its versions, but mise leaves the
+ * tool's shim behind (`reshim` only adds to the shims), and [AgentStore.isInstalled] reads that shim:
+ * the agent's row kept offering open and remove for an agent Linux no longer had. Deleting it before
+ * the prune also covers mise writing it again while it empties the install.
+ */
+fun agentRemoval(
+    pkg: String,
+    bin: String,
+) = "mise unuse -g ${shellQuote(pkg)}; rm -f ~/.local/share/mise/shims/$bin; $MISE_PRUNE"
+
 class AgentStore(
     private val proot: Proot,
     /** Called when the set of installed agents changed, so their desktop entries follow. */
@@ -196,7 +209,7 @@ class AgentStore(
     }
 
     suspend fun remove(agent: Agent) =
-        run(agent, "removing") { "mise unuse -g ${shellQuote(agent.pkg)} && $MISE_PRUNE" }
+        run(agent, "removing") { agentRemoval(agent.pkg, agent.bin) }
             .also {
                 refresh()
                 onChanged()

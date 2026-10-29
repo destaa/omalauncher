@@ -9,6 +9,9 @@ Dates are when the build was uploaded to Play.
 - Hermes, Nous Research's agent, is one of the coding agents the launcher installs
   and opens: from PyPI with mise (which now bootstraps uv for it), in a window of its
   own, with its logo, in the app drawer and in recent apps.
+- Removing a coding agent now clears the agent from its row at once: mise leaves the
+  tool's shim behind, which is what the row read as "installed", so it kept offering
+  open and remove for an agent Linux no longer had.
 - Tapping a now-playing widget brings up the player's own screen, like a web app's
   window when one installed from a browser plays, rather than a new browser tab.
 - A drawer can leave the keyboard down as it opens, for scrolling the apps rather

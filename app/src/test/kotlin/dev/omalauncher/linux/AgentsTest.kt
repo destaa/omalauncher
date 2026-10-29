@@ -87,4 +87,12 @@ class AgentsTest {
             MISE_NODE_FOR_AGENTS,
         )
     }
+
+    /** mise leaves a removed tool's shim behind, and the agents screen reads the shim: removing deletes it. */
+    @Test fun removingAnAgentDeletesItsShim() {
+        assertEquals(
+            "mise unuse -g 'pypi:hermes-agent'; rm -f ~/.local/share/mise/shims/hermes; $MISE_PRUNE",
+            agentRemoval("pypi:hermes-agent", "hermes"),
+        )
+    }
 }
