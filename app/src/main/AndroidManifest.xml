@@ -210,6 +210,13 @@
             android:label="Kimi"
             android:targetActivity=".LinuxWindowActivity" />
 
+        <activity-alias
+            android:name=".HermesWindow"
+            android:exported="false"
+            android:icon="@drawable/agent_hermes"
+            android:label="Hermes"
+            android:targetActivity=".LinuxWindowActivity" />
+
         <!-- One task per owl app, named after it; launched with its file name in the intent's data. -->
         <activity
             android:name=".OwlAppActivity"

@@ -24,6 +24,8 @@ data class Agent(
     val command: String = bin,
     /** Whether mise needs node to install it: npm packages run their postinstall scripts with it. */
     val node: Boolean = pkg.startsWith("npm:"),
+    /** Whether mise needs uv to install it: the pypi backend runs `uv tool install`. */
+    val uv: Boolean = pkg.startsWith("pypi:"),
 ) {
     /** Its activity alias in the manifest (cursor-agent -> CursorAgentWindow), so Recents names its window after it. */
     val windowAlias get() = bin.split('-').joinToString("") { it.replaceFirstChar(Char::uppercase) } + "Window"
@@ -52,6 +54,8 @@ val AGENTS =
             "http:muse[url=https://api.meta.ai/muse-launcher.sh,bin=muse,version_list_url=https://api.meta.ai/muse-code/channels/muse-stable,version_json_path=.version]",
         ),
         Agent("kimi", "Kimi", "Moonshot AI's coding agent", "npm:@moonshot-ai/kimi-code"),
+        // Nous Research's agent; mise installs it from PyPI, so it needs uv (see [Agent.uv]).
+        Agent("hermes", "Hermes", "Nous Research's agent that grows with you", "pypi:hermes-agent"),
     )
 
 /**
@@ -78,6 +82,21 @@ const val MISE_PRUNE =
  * agents leave npm's cache behind too (125 MB after one update).
  */
 const val MISE_CLEANUP = "mise cache clear && rm -rf ~/.local/share/mise/downloads ~/.npm/_cacache"
+
+/**
+ * `uv tool install`, which mise's pypi backend runs, hardlinks what it unpacks from its cache into the
+ * venv. proot's link2symlink turns that hardlink into a symlink uv can't make ("Operation not permitted"),
+ * so it copies instead.
+ */
+const val UV_LINK_MODE = "UV_LINK_MODE=copy"
+
+/**
+ * A Python for the pypi backend, which uv's `tool install` needs. A fresh Linux has none: uv then
+ * fetches the newest on its own, and with no wheels for it yet it compiles pydantic-core from source,
+ * which fails without a Rust toolchain ("error: can't find Rust compiler"). 3.13 has wheels for what
+ * the agents need.
+ */
+const val PYTHON_FOR_UV = "{ command -v python3 >/dev/null || mise use -g python@3.13; }"
 
 /** Adds node to the global config when an installed agent needs it but was installed before it did (OpenCode 1). */
 val MISE_NODE_FOR_AGENTS =
@@ -107,6 +126,9 @@ fun agentInvocation(
         agentBin == "claude" && readOnly -> "$agentBin --permission-mode plan $quoted"
         agentBin == "ori" -> "ori code --interactive --prompt $quoted"
         agentBin == "kimi" -> "kimi --prompt $quoted && kimi --continue"
+        // Hermes' TUI takes no prompt either: it answers in one-shot mode, then resumes that session.
+        // Should the answer not come (no model picked yet), the TUI opens anyway, its setup included.
+        agentBin == "hermes" -> "hermes -z $quoted && hermes --tui --continue || hermes --tui"
         agentBin == "agy" && readOnly -> "$agentBin --mode plan -i $quoted"
         agentBin == "agy" -> "$agentBin -i $quoted"
         else -> "$agentBin $quoted"
@@ -163,6 +185,7 @@ class AgentStore(
         buildString {
             append(if (mise.exists()) "$MISE_SELF_UPDATE && " else "curl -fsSL https://mise.run | sh && ")
             if (agent.node) append("mise use -g node@lts && ")
+            if (agent.uv) append("mise use -g uv@latest && $PYTHON_FOR_UV && $UV_LINK_MODE ")
             append("mise use -g ${shellQuote(agent.pkg)} && $MISE_CLEANUP")
         }
 
