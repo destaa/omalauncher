@@ -50,13 +50,20 @@ android {
                 storePassword = it.getProperty("storePassword")
                 keyAlias = it.getProperty("keyAlias")
                 keyPassword = it.getProperty("keyPassword")
+                // PKCS#12, what keytool writes by default; say so rather than trust the JDK's default.
+                storeType = it.getProperty("storeType") ?: "PKCS12"
             }
         }
     }
 
     buildTypes {
         // en-XA and ar-XB: text that stays plain English or left-to-right there isn't in res/ yet.
-        debug { isPseudoLocalesEnabled = true }
+        debug {
+            isPseudoLocalesEnabled = true
+            // With the keystore at hand a debug build signs like a release one, so a new build installs
+            // over the one on the phone and keeps Linux, the agents, the sessions and the widgets.
+            uploadKey?.let { signingConfig = signingConfigs.getByName("release") }
+        }
         release {
             // Shrinks the APK and drops what the app doesn't use, like the owl module's unused parts.
             isMinifyEnabled = true

@@ -18,8 +18,30 @@ jobs:
           ./scripts/fetch-proot.sh
       - name: Grant execute permission
         run: chmod +x gradlew
+      # Signed with the phone's own key (repo secrets: KEYSTORE_B64, KEYSTORE_PASSWORD, KEY_ALIAS,
+      # KEY_PASSWORD), so a new APK installs over the old one: an uninstall takes the Linux system,
+      # the coding agents, their sessions, the widgets and the style with it.
+      - name: Sign with the permanent keystore
+        env:
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "::warning::KEYSTORE_B64 is not set: this APK is signed with a throwaway debug key and cannot update the installed app"
+            exit 0
+          fi
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/omalauncher.p12"
+          printf 'storeFile=%s\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\nstoreType=PKCS12\n' \
+            "$RUNNER_TEMP/omalauncher.p12" "$KEYSTORE_PASSWORD" "$KEY_ALIAS" "$KEY_PASSWORD" > keystore.properties
       - name: Build with Gradle
         run: ./gradlew assembleDebug
+      - name: Fingerprint the APK's signer
+        run: |
+          apk=$(ls app/build/outputs/apk/debug/*.apk | head -1)
+          signer=$(ls "${ANDROID_HOME:-/usr/local/lib/android/sdk}"/build-tools/*/apksigner 2>/dev/null | tail -1)
+          [ -z "$signer" ] || "$signer" verify --print-certs "$apk" | grep -i "SHA-256" || true
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
