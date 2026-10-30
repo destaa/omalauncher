@@ -118,6 +118,7 @@ class Runtime(
                 { defaultApps(proot.applications) },
                 { bundledIcons(context, proot.home) },
                 openBridge::managed,
+                proot::managed,
                 pacman::managed,
                 agents::managed,
                 themes::managed,

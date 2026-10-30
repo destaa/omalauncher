@@ -13,6 +13,9 @@
     <string name="settings_gestures">gestures</string>
     <!-- What swiping up and down on home open: a panel's name, or nothing. -->
     <string name="settings_gestures_subtitle">up: %1$s · down: %2$s</string>
+    <string name="settings_language">language</string>
+    <!-- Following the language the phone is set to, rather than one picked here. -->
+    <string name="settings_language_phone">phone\'s language</string>
     <string name="settings_linux">linux</string>
     <string name="settings_linux_installed">installed · remove</string>
     <!-- %2$s is the setup stage, like "download arch linux". -->

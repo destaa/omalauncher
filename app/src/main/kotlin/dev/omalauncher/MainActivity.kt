@@ -8,6 +8,7 @@ import android.os.Environment
 import android.provider.Settings
 import android.net.Uri
 import android.content.Intent
+import android.content.Context
 import android.os.Bundle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -49,6 +50,12 @@ class MainActivity : ComponentActivity() {
     private val state = LauncherState()
     private val imagePicker = ImagePicker(this) { runtime }
     private val mic = MicPermission(this)
+
+    /** In the language picked in settings. */
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(newBase)
+        AppLanguage.applyTo(this)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

@@ -7,6 +7,6 @@
     <string name="activity_terminal">Terminal</string>
     <string name="activity_app">Aplikasi</string>
     <string name="activity_files">File</string>
-    <string name="activity_settings">Pengaturan</string>
+    <string name="activity_settings">Setelan</string>
     <string name="notification_listener">Widget Omalauncher</string>
 </resources>

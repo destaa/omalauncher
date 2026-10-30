@@ -9,6 +9,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
@@ -32,6 +33,7 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import dev.omalauncher.AppLanguage
 import dev.omalauncher.LocalNetwork
 import dev.omalauncher.R
 import dev.omalauncher.Runtime
@@ -92,6 +94,7 @@ fun SettingsScreen(
                     stringResource(R.string.settings_gestures_subtitle, runtime.gestureLabel(runtime.gestures.swipeUp), runtime.gestureLabel(runtime.gestures.swipeDown)),
                     onGestures,
                 ),
+                languageRow(),
                 SettingsRow(R.string.settings_linux, linuxStatus, onLinux),
                 if (installed) {
                     SettingsRow(
@@ -125,12 +128,29 @@ fun SettingsScreen(
     }
 }
 
-/** A row of the settings hub: [title] is its string, which also keys it. */
+/**
+ * A row of the settings hub: [title] is its string, which also keys it. With [menu], a tap opens that under the row's
+ * end instead of calling [onClick]; it's given what closes it.
+ */
 private class SettingsRow(
     @StringRes val title: Int,
     val subtitle: String,
     val onClick: () -> Unit,
-)
+) {
+    var menu: (@Composable (close: () -> Unit) -> Unit)? = null
+}
+
+/** The language the launcher is in: the phone's, or one it has its text in; a pick brings the open screens back in it. */
+@Composable
+private fun languageRow(): SettingsRow {
+    val context = LocalContext.current
+    val picked by AppLanguage.language.collectAsState()
+    val phone = stringResource(R.string.settings_language_phone)
+    val label = { tag: String? -> tag?.let(AppLanguage::name) ?: phone }
+    return SettingsRow(R.string.settings_language, label(picked)) {}.apply {
+        menu = { close -> ChoicePopup(listOf(null) + AppLanguage.supported, picked, BelowAnchorEnd, onDismiss = close, onPick = { AppLanguage.pick(context, it) }, label = label) }
+    }
+}
 
 @Composable
 private fun SettingsRows(rows: List<SettingsRow>) {
@@ -139,19 +159,23 @@ private fun SettingsRows(rows: List<SettingsRow>) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         for (row in rows) {
             key(row.title) {
+                var open by remember { mutableStateOf(false) }
                 Row(
                     when (row.title) {
                         R.string.settings_local_network -> Modifier.passesKeys(next)
                         R.string.settings_android -> Modifier.focusRequester(next)
                         else -> Modifier
-                    }.card(onClick = row.onClick),
+                    }.card(onClick = { if (row.menu != null) open = !open else row.onClick() }),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(Modifier.weight(1f)) {
                         BasicText(stringResource(row.title), style = Mono.copy(fontSize = TextSize.Item))
                         BasicText(row.subtitle, style = Mono.copy(color = Palette.muted, fontSize = TextSize.Small))
                     }
-                    Symbol(Glyph.ChevronRight, Palette.accent, fontSize = TextSize.Title)
+                    Box {
+                        Symbol(if (row.menu == null) Glyph.ChevronRight else if (open) Glyph.ChevronUp else Glyph.ChevronDown, Palette.accent, fontSize = TextSize.Title)
+                        if (open) row.menu?.invoke { open = false }
+                    }
                 }
             }
         }

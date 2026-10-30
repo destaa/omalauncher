@@ -3,7 +3,7 @@ widget "today" {
   order: 1
   size: 3x3
   minSize: 3x2
-  meta { description: "The date and the weather where you are, by IP or a city you type. Tap it for the next 24 hours, three days, wind, UV, sun and moon. Tap °C or °F to switch"; version: "1.2"; license: "MIT"; category: "world"; owl: 16 }
+  meta { description: "The date and the weather where you are, by IP or a city you type. Tap it for the next 24 hours, three days, wind, UV, sun and moon. Tap °C or °F to switch"; version: "1.3"; license: "MIT"; category: "world"; owl: 16 }
 
   // What it says, in the phone's language where it has a set. wttr names the sky and the moon in English, and
   // its own Indonesian misses newer conditions, so other languages name them from wttr's codes.
@@ -50,6 +50,72 @@ widget "today" {
         "Waxing Gibbous": "cembung awal", "Full Moon": "purnama", "Waning Gibbous": "cembung akhir",
         "Last Quarter": "kuartir akhir", "Waning Crescent": "sabit akhir"
       }, phase, lower(phase)) + " · ${lit}% terang"
+    }
+    es {
+      title: "clima"; loading: "clima…"; offline: "clima sin conexión"; city: "ciudad · vacío = auto"
+      feels: "sensación"; humidity: "humedad"; rainToday: "lluvia hoy"; uv: "índice uv"; pressure: "presión"
+      visibility: "visibilidad"; next24: "próximas 24 horas"; now: "ahora"; days: "3 días"; today: "hoy"
+      sunrise: "amanecer"; sunset: "atardecer"; moon: "luna"; kmh: "km/h"; yr: "abrir yr.no ↗"
+      sky: (code, desc) => get({
+        "113": "despejado", "116": "parcialmente nublado", "119": "nublado", "122": "cubierto", "143": "neblina",
+        "176": "lluvia dispersa", "179": "nieve dispersa", "182": "aguanieve dispersa", "185": "llovizna helada dispersa",
+        "200": "tormenta eléctrica", "227": "nieve con viento", "230": "ventisca", "248": "niebla", "260": "niebla helada",
+        "263": "llovizna ligera dispersa", "266": "llovizna ligera", "281": "llovizna helada", "284": "llovizna helada intensa",
+        "293": "lluvia ligera dispersa", "296": "lluvia ligera", "299": "a ratos lluvia moderada", "302": "lluvia moderada",
+        "305": "a ratos lluvia fuerte", "308": "lluvia fuerte", "311": "lluvia helada ligera", "314": "lluvia helada fuerte",
+        "317": "aguanieve ligera", "320": "aguanieve fuerte", "323": "nevada ligera dispersa", "326": "nevada ligera",
+        "329": "nevada moderada dispersa", "332": "nevada moderada", "335": "nevada fuerte dispersa", "338": "nevada fuerte",
+        "350": "granizo fino", "353": "chubascos ligeros", "356": "chubascos fuertes", "359": "aguacero",
+        "362": "chubascos de aguanieve ligeros", "365": "chubascos de aguanieve fuertes", "368": "chubascos de nieve ligeros",
+        "371": "chubascos de nieve fuertes", "374": "chubascos de granizo fino ligeros", "377": "chubascos de granizo fino fuertes",
+        "386": "lluvia ligera con truenos", "389": "lluvia fuerte con truenos", "392": "nieve ligera con truenos",
+        "395": "nieve fuerte con truenos"
+      }, code, lower(trim(desc)))
+      // Eight points: the sixteen's in-between ones go to the nearer of north, east, south and west.
+      wind: dir => "viento del " + get({
+        "N": "norte", "NNE": "norte", "NE": "noreste", "ENE": "este", "E": "este", "ESE": "este",
+        "SE": "sureste", "SSE": "sur", "S": "sur", "SSW": "sur", "SW": "suroeste", "WSW": "oeste",
+        "W": "oeste", "WNW": "oeste", "NW": "noroeste", "NNW": "norte"
+      }, dir, lower(dir))
+      uvLevel: uv => uv >= 8 ? "muy alto" : uv >= 6 ? "alto" : uv >= 3 ? "moderado" : "bajo"
+      phase: (phase, lit) => get({
+        "New Moon": "luna nueva", "Waxing Crescent": "creciente", "First Quarter": "cuarto creciente",
+        "Waxing Gibbous": "gibosa creciente", "Full Moon": "luna llena", "Waning Gibbous": "gibosa menguante",
+        "Last Quarter": "cuarto menguante", "Waning Crescent": "menguante"
+      }, phase, lower(phase)) + " · ${lit}% iluminada"
+    }
+    pt {
+      title: "clima"; loading: "clima…"; offline: "clima offline"; city: "cidade · vazio = auto"
+      feels: "sensação"; humidity: "umidade"; rainToday: "chuva hoje"; uv: "índice uv"; pressure: "pressão"
+      visibility: "visibilidade"; next24: "próximas 24 horas"; now: "agora"; days: "3 dias"; today: "hoje"
+      sunrise: "nascer do sol"; sunset: "pôr do sol"; moon: "lua"; kmh: "km/h"; yr: "abrir yr.no ↗"
+      sky: (code, desc) => get({
+        "113": "céu limpo", "116": "parcialmente nublado", "119": "nublado", "122": "encoberto", "143": "névoa",
+        "176": "chuva isolada", "179": "neve isolada", "182": "chuva com neve isolada", "185": "garoa congelante isolada",
+        "200": "trovoada", "227": "neve com vento", "230": "nevasca", "248": "neblina", "260": "neblina congelante",
+        "263": "garoa fraca isolada", "266": "garoa fraca", "281": "garoa congelante", "284": "garoa congelante forte",
+        "293": "chuva fraca isolada", "296": "chuva fraca", "299": "às vezes chuva moderada", "302": "chuva moderada",
+        "305": "às vezes chuva forte", "308": "chuva forte", "311": "chuva congelante fraca", "314": "chuva congelante forte",
+        "317": "chuva com neve fraca", "320": "chuva com neve forte", "323": "neve fraca isolada", "326": "neve fraca",
+        "329": "neve moderada isolada", "332": "neve moderada", "335": "neve forte isolada", "338": "neve forte",
+        "350": "granizo miúdo", "353": "pancadas de chuva fracas", "356": "pancadas de chuva fortes", "359": "aguaceiro",
+        "362": "pancadas de chuva com neve fracas", "365": "pancadas de chuva com neve fortes", "368": "pancadas de neve fracas",
+        "371": "pancadas de neve fortes", "374": "pancadas de granizo miúdo fracas", "377": "pancadas de granizo miúdo fortes",
+        "386": "chuva fraca com trovões", "389": "chuva forte com trovões", "392": "neve fraca com trovões",
+        "395": "neve forte com trovões"
+      }, code, lower(trim(desc)))
+      // Eight points: the sixteen's in-between ones go to the nearer of north, east, south and west.
+      wind: dir => "vento " + get({
+        "N": "norte", "NNE": "norte", "NE": "nordeste", "ENE": "leste", "E": "leste", "ESE": "leste",
+        "SE": "sudeste", "SSE": "sul", "S": "sul", "SSW": "sul", "SW": "sudoeste", "WSW": "oeste",
+        "W": "oeste", "WNW": "oeste", "NW": "noroeste", "NNW": "norte"
+      }, dir, lower(dir))
+      uvLevel: uv => uv >= 8 ? "muito alto" : uv >= 6 ? "alto" : uv >= 3 ? "moderado" : "baixo"
+      phase: (phase, lit) => get({
+        "New Moon": "lua nova", "Waxing Crescent": "crescente", "First Quarter": "quarto crescente",
+        "Waxing Gibbous": "crescente gibosa", "Full Moon": "lua cheia", "Waning Gibbous": "minguante gibosa",
+        "Last Quarter": "quarto minguante", "Waning Crescent": "minguante"
+      }, phase, lower(phase)) + " · ${lit}% iluminada"
     }
   }
 

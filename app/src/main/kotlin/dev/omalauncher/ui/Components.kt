@@ -1,5 +1,7 @@
 package dev.omalauncher.ui
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -34,10 +36,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -190,7 +197,7 @@ fun RefreshButton(
             if (loading) {
                 val angle by rememberInfiniteTransition(label = "refresh")
                     .animateFloat(0f, 360f, infiniteRepeatable(tween(900, easing = LinearEasing), RepeatMode.Restart), label = "turn")
-                Modifier.rotate(angle)
+                Modifier.graphicsLayer { rotationZ = angle }
             } else {
                 Modifier
             }
@@ -349,6 +356,9 @@ fun ActionsRow(
     }
 }
 
+/** A line of a failed job that says what went wrong: pacman's and mise's errors, mise's ✗, a shell's "not found". */
+private val ERROR_LINE = Regex("""(?i)\berror\b|✗|\bfailed\b|not found|no space left|permission denied""")
+
 /** The last lines a guest job printed, red once it failed; nothing while idle. */
 @Composable
 fun JobLog(
@@ -361,10 +371,34 @@ fun JobLog(
             JobState.Idle -> return
         }
     if (log.isEmpty()) return
+    var expanded by rememberSaveable { mutableStateOf(false) }
     Spacer(Modifier.height(6.dp))
     val style = Mono.copy(color = if (state is JobState.Failed) Palette.red else Palette.muted, fontSize = TextSize.Small)
-    // A failure's reason is usually at the end of the line: let it wrap.
-    for (line in log.takeLast(4)) BasicText(line, style = style, maxLines = if (state is JobState.Failed) 3 else 1)
+    val toggle = stringResource(if (expanded) R.string.home_job_less else R.string.home_job_whole_log)
+    Column(Modifier.fillMaxWidth().clickable(onClickLabel = toggle) { expanded = !expanded }) {
+        if (expanded) {
+            // The whole tail, wrapped, to read or copy into a bug report. Red only where something went wrong,
+            // not the whole of a failed job's log.
+            val muted = style.copy(color = Palette.muted)
+            log.forEachIndexed { i, line ->
+                val failure = state is JobState.Failed && (i == 0 || ERROR_LINE.containsMatchIn(line))
+                BasicText(line, style = if (failure) style else muted)
+            }
+        } else {
+            // A failure's reason is usually at the end of the line: let it wrap.
+            for (line in log.takeLast(4)) BasicText(line, style = style, maxLines = if (state is JobState.Failed) 3 else 1, overflow = TextOverflow.Ellipsis)
+            if (log.size > 4 || state is JobState.Failed) BasicText(toggle, style = Mono.copy(color = Palette.muted, fontSize = TextSize.Small))
+        }
+    }
+    if (expanded) {
+        val context = LocalContext.current
+        Row {
+            BracketAction(stringResource(R.string.home_job_copy), Palette.accent) {
+                context.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("log", log.joinToString("\n")))
+            }
+            BracketAction(toggle, Palette.muted) { expanded = false }
+        }
+    }
 }
 
 /** The items of a popup menu, framed like home's edit bar and menu; picking one closes the menu first. */

@@ -3,7 +3,7 @@ widget "fetch" {
   order: 2
   size: 3x3
   minSize: 3x2
-  meta { description: "Your phone at a glance, fastfetch style, with or without Linux: CPU, memory, storage, battery and theme, plus Arch's packages once Linux is installed. Tap it for every detail"; version: "1.7"; license: "MIT"; category: "system"; owl: 16 }
+  meta { description: "Your phone at a glance, fastfetch style, with or without Linux: CPU, memory, storage, battery and theme, plus Arch's packages once Linux is installed. Tap it for every detail"; version: "1.8"; license: "MIT"; category: "system"; owl: 16 }
 
   // What it says, in the phone's language where it has a set. Words fastfetch and Linux use as names (os, host,
   // kernel, cpu, shell) stay as they are. Android's battery words come in English, so a set names them itself.
@@ -26,9 +26,9 @@ widget "fetch" {
       network: "jaringan"; launcher: "launcher"; security: "keamanan"; build: "build"; locale: "bahasa"; cores: "inti"
       storage: "penyimpanan"; speed: "kecepatan"; received: "diterima"; sent: "dikirim"; mobile: "seluler"
       level: "level"; temperature: "suhu"; voltage: "tegangan"; health: "kondisi"; cycles: "siklus"
-      technology: "teknologi"; version: "versi"; explicit: "eksplisit"; upgraded: "diperbarui"; never: "belum pernah"
-      unknown: "tidak diketahui"; installLinux: "pasang linux"
-      notInstalled: "belum terpasang. arch linux arm menambahkan terminal, agen, dan pacman ke launcher."
+      technology: "teknologi"; version: "versi"; explicit: "diinstal manual"; upgraded: "diperbarui"; never: "belum pernah"
+      unknown: "tidak diketahui"; installLinux: "instal linux"
+      notInstalled: "belum terinstal. arch linux arm menambahkan terminal, agen, dan pacman ke launcher."
       upTo: ghz => " · hingga ${ghz} GHz"
       androidApps: n => "${n} aplikasi android"
       // android.battery's status, health and plug.
@@ -36,6 +36,42 @@ widget "fetch" {
         "charging": "mengisi", "plugged in": "tercolok", "on battery": "tanpa cas", "good": "baik",
         "overheating": "kepanasan", "dead": "tidak berfungsi", "over voltage": "tegangan berlebih", "cold": "dingin",
         "failing": "bermasalah", "wireless": "nirkabel", "dock": "dok"
+      }, w, w)
+    }
+    es {
+      uptime: "uptime"; packages: "paquetes"; display: "pantalla"; theme: "tema"; memory: "memoria"; disk: "disco"
+      battery: "batería"; apps: "apps"; byDefault: "predeterminado"; phone: "teléfono"; hardware: "hardware"
+      network: "red"; launcher: "launcher"; security: "seguridad"; build: "compilación"; locale: "idioma"; cores: "núcleos"
+      storage: "almacenamiento"; speed: "velocidad"; received: "recibido"; sent: "enviado"; mobile: "móvil"
+      level: "nivel"; temperature: "temperatura"; voltage: "voltaje"; health: "salud"; cycles: "ciclos"
+      technology: "tecnología"; version: "versión"; explicit: "explícitos"; upgraded: "actualizado"; never: "nunca"
+      unknown: "desconocido"; installLinux: "instalar linux"
+      notInstalled: "no instalado. arch linux arm suma una terminal, agentes y pacman al launcher."
+      upTo: ghz => " · hasta ${ghz} GHz"
+      androidApps: n => "${n} apps de android"
+      // android.battery's status, health and plug.
+      word: w => get({
+        "charging": "cargando", "plugged in": "conectado", "on battery": "desconectado", "good": "buena",
+        "overheating": "sobrecalentada", "dead": "inservible", "over voltage": "sobrevoltaje", "cold": "fría",
+        "failing": "fallando", "wireless": "inalámbrica", "dock": "base"
+      }, w, w)
+    }
+    pt {
+      uptime: "uptime"; packages: "pacotes"; display: "tela"; theme: "tema"; memory: "memória"; disk: "disco"
+      battery: "bateria"; apps: "apps"; byDefault: "padrão"; phone: "telefone"; hardware: "hardware"
+      network: "rede"; launcher: "launcher"; security: "segurança"; build: "build"; locale: "idioma"; cores: "núcleos"
+      storage: "armazenamento"; speed: "velocidade"; received: "recebido"; sent: "enviado"; mobile: "dados móveis"
+      level: "nível"; temperature: "temperatura"; voltage: "tensão"; health: "saúde"; cycles: "ciclos"
+      technology: "tecnologia"; version: "versão"; explicit: "explícitos"; upgraded: "atualizado"; never: "nunca"
+      unknown: "desconhecido"; installLinux: "instalar linux"
+      notInstalled: "não instalado. o arch linux arm adiciona um terminal, agentes e o pacman ao launcher."
+      upTo: ghz => " · até ${ghz} GHz"
+      androidApps: n => "${n} apps android"
+      // android.battery's status, health and plug.
+      word: w => get({
+        "charging": "carregando", "plugged in": "na tomada", "on battery": "na bateria", "good": "boa",
+        "overheating": "superaquecida", "dead": "inutilizável", "over voltage": "sobretensão", "cold": "fria",
+        "failing": "falhando", "wireless": "sem fio", "dock": "dock"
       }, w, w)
     }
   }

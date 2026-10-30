@@ -215,7 +215,9 @@ private fun DesktopScreen(
     val side = homeSide()
     if (side != null && !panelShown) {
         if (!runtime.terminals.typing) {
-            SideRail(runtime, state, handlers, side, Modifier.fillMaxSize().graphicsLayer { translationX = state.barShift() * size.width }.safePadding())
+            CompositionLocalProvider(LocalBackdrop provides backdrop) {
+                SideRail(runtime, state, handlers, side, Modifier.fillMaxSize().graphicsLayer { translationX = state.barShift() * size.width }.safePadding())
+            }
         }
     } else {
         Column(
@@ -243,14 +245,17 @@ private fun DesktopScreen(
             // out past a face; swiping up there opens the drawer, which brings them back.
             if (!runtime.terminals.typing || runtime.terminals.keyboardLeaving) {
                 Column(Modifier.graphicsLayer { if (!panelShown) translationX = state.barShift() * size.width }) {
-                    // Home only: the open app list has everything.
-                    // Swiping up from either does what it does on home, as from the dock on stock launchers.
-                    // Keys go between it and home's tiles both ways, which Compose's search doesn't find (see PromptBar).
-                    if (LauncherStyle.recentApps && !panelShown) {
-                        RecentStrip(runtime, handlers, Modifier.homeSwipe(runtime, state).focusRequester(state.stripEntry).focusGroup(), home = state.homeEntry)
+                    // They frost over the wallpaper as home's tiles do, over the open drawer too.
+                    CompositionLocalProvider(LocalBackdrop provides backdrop) {
+                        // Home only: the open app list has everything.
+                        // Swiping up from either does what it does on home, as from the dock on stock launchers.
+                        // Keys go between it and home's tiles both ways, which Compose's search doesn't find (see PromptBar).
+                        if (LauncherStyle.recentApps && !panelShown) {
+                            RecentStrip(runtime, handlers, Modifier.homeSwipe(runtime, state).focusRequester(state.stripEntry).focusGroup(), home = state.homeEntry)
+                        }
+                        // Insets itself by the grid gap, so it lines up with the tiles and the gap still takes taps.
+                        PromptBar(runtime, state, modifier = Modifier.homeSwipe(runtime, state))
                     }
-                    // Insets itself by the grid gap, so it lines up with the tiles and the gap still takes taps.
-                    PromptBar(runtime, state, modifier = Modifier.homeSwipe(runtime, state))
                 }
             }
         }
