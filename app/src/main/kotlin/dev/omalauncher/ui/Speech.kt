@@ -1,6 +1,8 @@
 package dev.omalauncher.ui
 
+import android.content.ComponentName
 import android.content.Context
+import android.content.res.Resources
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
@@ -33,6 +35,8 @@ import java.util.Locale
  */
 class Speech(
     private val context: Context,
+    /** The language to listen in: the launcher's, or the voice screen's pick. */
+    private val wanted: () -> Locale = { Locale.getDefault() },
 ) {
     var listening by mutableStateOf(false)
         private set
@@ -49,7 +53,7 @@ class Speech(
     var error by mutableStateOf<String?>(null)
 
     private var recognizer: SpeechRecognizer? = null
-    private var onDevice = Build.VERSION.SDK_INT >= 31 && SpeechRecognizer.isOnDeviceRecognitionAvailable(context)
+    private var onDevice = onDeviceAvailable(context)
     private var finished = ""
 
     /** The current segment's latest partial result, kept should the segment end without a final one. */
@@ -64,9 +68,9 @@ class Speech(
 
     private val main = Handler(Looper.getMainLooper())
 
-    private val onDeviceAvailable get() = Build.VERSION.SDK_INT >= 31 && SpeechRecognizer.isOnDeviceRecognitionAvailable(context)
+    private val onDeviceAvailable get() = onDeviceAvailable(context)
 
-    val available get() = onDeviceAvailable || SpeechRecognizer.isRecognitionAvailable(context)
+    val available get() = available(context)
 
     /**
      * Starts listening; [onDone] gets the full text (maybe empty) once recognition ends.
@@ -117,16 +121,18 @@ class Speech(
     }
 
     /**
-     * The language to recognize: the phone's, or the closest one the recognizer
+     * The language to recognize: the [wanted] one, or the closest one the recognizer
      * has a model for. Recognizers only know common language-region pairs, so a
      * phone set to English (Germany) needs en-US or en-GB instead. Null for the
-     * recognizer's default; asked once for each kind of recognizer, see [languages].
+     * recognizer's default; asked once for each kind of recognizer and language, see [languages].
      */
     private var language: String?
-        get() = languages[onDevice]
+        get() = languages[key]
         set(value) {
-            languages[onDevice] = value
+            languages[key] = value
         }
+
+    private val key get() = onDevice to wanted().toLanguageTag()
 
     /** The recognizer that's being asked for its languages before it listens. */
     private var pending: SpeechRecognizer? = null
@@ -134,7 +140,8 @@ class Speech(
     private fun listen() {
         recognizer?.destroy()
         val r =
-            if (onDevice && onDeviceAvailable) {
+            // onDeviceAvailable already means API 31+; the check is spelled out again for lint.
+            if (Build.VERSION.SDK_INT >= 31 && onDevice && onDeviceAvailable) {
                 SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
             } else {
                 SpeechRecognizer.createSpeechRecognizer(context)
@@ -142,7 +149,7 @@ class Speech(
         recognizer = r
         r.setRecognitionListener(Listener(r))
         Log.i(TAG, "listening with the ${if (onDevice && onDeviceAvailable) "on-device" else "regular"} recognizer")
-        if (onDevice in languages || Build.VERSION.SDK_INT < 33) return begin(r)
+        if (key in languages || Build.VERSION.SDK_INT < 33) return begin(r)
         pending = r
         // A Pixel took 16 seconds to answer, with an error, the first time: the words said meanwhile were lost.
         main.postDelayed({
@@ -232,15 +239,15 @@ class Speech(
      */
     @androidx.annotation.RequiresApi(33)
     private fun closestLanguage(support: RecognitionSupport): String? {
-        val locale = Locale.getDefault()
-        val wanted = Locale(locale.language, locale.country).toLanguageTag()
+        val locale = wanted()
+        val tag = Locale(locale.language, locale.country).toLanguageTag()
         val pools =
             if (onDevice) {
                 listOf(support.installedOnDeviceLanguages, support.supportedOnDeviceLanguages, support.onlineLanguages)
             } else {
                 listOf(support.onlineLanguages, support.installedOnDeviceLanguages, support.supportedOnDeviceLanguages)
             }
-        pools.flatten().firstOrNull { it.equals(wanted, ignoreCase = true) }?.let { return it }
+        pools.flatten().firstOrNull { it.equals(tag, ignoreCase = true) }?.let { return it }
         val home = "${locale.language}-${locale.language}"
         for (pool in pools) {
             val same = pool.filter { it.substringBefore('-').equals(locale.language, ignoreCase = true) }
@@ -256,9 +263,9 @@ class Speech(
         return null
     }
 
-    /** The phone's language in its main region: en-US, de-DE, fr-FR. */
+    /** The [wanted] language in its main region: en-US, de-DE, fr-FR. */
     private fun mainRegion(): String {
-        val l = Locale.getDefault().language
+        val l = wanted().language
         return if (l == "en") "en-US" else "$l-${l.uppercase(Locale.ROOT)}"
     }
 
@@ -393,6 +400,23 @@ class Speech(
     companion object {
         private const val TAG = "speech"
 
+        /** Whether the phone has a speech recognizer at all: on-device, or the default one. */
+        fun available(context: Context) = onDeviceAvailable(context) || SpeechRecognizer.isRecognitionAvailable(context)
+
+        /**
+         * Whether the on-device recognizer is there. Android's own check only reads which one the system names, so
+         * with that app disabled (or never installed) it says yes and listening fails at once (error 10): the named
+         * service has to resolve too.
+         */
+        private fun onDeviceAvailable(context: Context): Boolean {
+            if (Build.VERSION.SDK_INT < 31 || !SpeechRecognizer.isOnDeviceRecognitionAvailable(context)) return false
+            val res = Resources.getSystem()
+            val id = res.getIdentifier("config_defaultOnDeviceSpeechRecognitionService", "string", "android")
+            if (id == 0) return true
+            val component = ComponentName.unflattenFromString(res.getString(id)) ?: return false
+            return runCatching { context.packageManager.getServiceInfo(component, 0).isEnabled && context.packageManager.getApplicationInfo(component.packageName, 0).enabled }.getOrDefault(false)
+        }
+
         /** SpeechRecognizer.ERROR_SERVER_DISCONNECTED, from API 31. */
         private const val ERROR_SERVER_DISCONNECTED = 11
 
@@ -410,8 +434,8 @@ class Speech(
         /** How long a recognizer gets to say which languages it knows before it listens for the default one. */
         private const val SUPPORT_WAIT_MS = 2000L
 
-        /** [language] for each kind of recognizer, on-device or not, once asked: the same for every Speech. */
-        private val languages = HashMap<Boolean, String?>()
+        /** [language] for each kind of recognizer, on-device or not, and wanted language, once asked: the same for every Speech. */
+        private val languages = HashMap<Pair<Boolean, String>, String?>()
 
         /** The one started last: the phone has one microphone, and a second recognizer would get nothing. */
         private var active: Speech? = null

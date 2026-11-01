@@ -24,7 +24,7 @@ import java.util.WeakHashMap
  */
 object AppLanguage {
     /** The languages the launcher has its text in, as language tags; more come with their translations. */
-    val supported = listOf("en", "id", "es", "pt")
+    val supported = listOf("en", "id", "es", "pt", "de", "zh")
 
     private const val KEY = "language"
 

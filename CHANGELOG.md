@@ -4,6 +4,21 @@ The most important changes in each release. The Play Store notes for a release
 are in `fastlane/metadata/android/en-US/changelogs/<versionCode>.txt`.
 Dates are when the build was uploaded to Play.
 
+## 0.17.0 (versionCode 28) – 2026-10-31
+
+- Voice: a spoken conversation with Claude Code, Grok or OpenCode as a launcher screen of its
+  own, opened from the drawer, the AI bar's mic (holding it still dictates) or `omarchy-voice`.
+  Each open starts a new conversation and the last one can be resumed; a type button switches
+  to typing and reading, with nothing said aloud. It speaks and understands the launcher's six
+  languages.
+- The launcher comes in German and Simplified Chinese.
+- Settings offers to make Omalauncher the default home app while it isn't one.
+- today and fetch shrink to 2x2, and on a short or squeezed tile today's date takes one line so
+  the forecast isn't cut off.
+- On a slow tablet the drawer opens without a pause and swiping past a face with shaders runs
+  smoothly.
+- The store side by side opens on the grid's first entry rather than an empty pane.
+
 ## 0.16.0 (versionCode 27) – 2026-10-29
 
 - Settings has a language: the phone's, or one the launcher has its text in. A pick brings
