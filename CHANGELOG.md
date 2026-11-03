@@ -4,6 +4,16 @@ The most important changes in each release. The Play Store notes for a release
 are in `fastlane/metadata/android/en-US/changelogs/<versionCode>.txt`.
 Dates are when the build was uploaded to Play.
 
+## Unreleased
+
+- Widgets can show and change AirPods: owl 18's `android.airpods` has each bud's and
+  the case's battery, which buds are in, the listening mode and the settings, read
+  over the AirPods' own link as Apple's devices do, and `airpods(...)` switches
+  noise cancellation, transparency and adaptive and turns Conversation Awareness
+  and the rest on and off; `examples/airpods.owl` shows them. `airpods("request")`
+  from a tap asks for the Bluetooth permission, and only on Android 17 (16 QPR3 on a
+  Pixel), which it needs; elsewhere `supported` is false and nothing asks.
+
 ## 0.18.0 (versionCode 29) – 2026-11-01
 
 - Voice talks to Codex (over `codex app-server`), GitHub Copilot, Kimi and Cursor (over ACP)

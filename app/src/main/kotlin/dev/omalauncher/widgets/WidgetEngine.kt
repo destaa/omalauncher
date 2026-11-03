@@ -136,6 +136,9 @@ class WidgetEngine(
     /** The home screen's view, for haptic(); set by the UI. */
     var view by services::view
 
+    /** android.airpods and airpods(...), which ask the activity in front for Bluetooth. */
+    val airpods get() = services.airpods
+
     /** The store's widgets, and its apps. */
     val market = Market(this, OwlKind.Widget)
     val faceMarket = Market(this, OwlKind.Face)
@@ -737,6 +740,7 @@ class WidgetEngine(
         val skip =
             when {
                 program.terminal -> "Terminal tiles aren't previewed"
+                program.browser -> "Browser tiles aren't previewed"
                 waitsForLinux(spec) -> "it needs Linux, which isn't installed"
                 !missing[name].isNullOrEmpty() -> "it needs ${missing[name]!!.joinToString(" ")}; install with pacman -S --needed"
                 instance(spec) == null -> "it isn't running"

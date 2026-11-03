@@ -355,6 +355,8 @@ class Program(
     val minSize: Pair<Int, Int> = 1 to 1,
     /** A face's or an app's `statusBar`: while false, the status bar hides as it shows; null keeps it. */
     val statusBar: Ev? = null,
+    /** A widget's or a face's `lock`: while it holds and the tile shows, the home screen holds still; null never does. */
+    val lock: Ev? = null,
     val page: Int = 1,
     val order: Int = 0,
     /** Tile padding in dp, and an optional tile background. */
@@ -400,6 +402,8 @@ class Program(
     val animated: Boolean,
     /** Has a Terminal node. */
     val terminal: Boolean = false,
+    /** Has a Browser node: a web view in the tile, which keeps running while the widget shows. */
+    val browser: Boolean = false,
     val nodeCount: Int,
     /** A tile or an app; for an app [screen] is the whole view and [root] is empty. */
     val kind: OwlKind = OwlKind.Widget,

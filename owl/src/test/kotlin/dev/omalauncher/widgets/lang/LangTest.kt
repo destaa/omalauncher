@@ -638,6 +638,8 @@ class LangTest {
         assertEquals(true, needs("source r = cmd('date')\nText { text: r }"))
         assertEquals(true, needs("source r = stream('tail -f x')\nText { text: r }"))
         assertEquals(true, needs("meta { owl: 2 }\nTerminal { }"))
+        // A Browser is a web view, not a program: it works without Linux.
+        assertEquals(false, needs("$owl18\nBrowser { url: \"https://a.test/\" }"))
         // Without Linux, tapping app(...) or terminal(...) offers to install it instead.
         assertEquals(false, needs("onTap: app(\"btop\")\nText { text: \"x\" }"))
         assertEquals(true, needs("requires { pacman: [\"jq\"] }\nText { text: \"x\" }"))
@@ -1225,6 +1227,44 @@ class LangTest {
         assertFalse(Compiler.compile(other).triggers.single().dictation)
     }
 
+    @Test fun androidLocationAskedForOnATap() {
+        val src = "widget {\n meta { owl: 18 }\n source here = android.location\n Text { text: here.available ? fixed(here.lat, 2) + \",\" + fixed(here.lon, 2) : \"where?\"; onTap: location(\"request\") } }"
+        val p = Compiler.compile(src)
+        assertEquals("android.location", (p.globals.single() as Global.Source).kind)
+        assertEquals("read the phone's approximate location, once you allow it", p.commands.single())
+        val host = TestHost(p)
+        (p.root.single() as WNode.Element).handlers["onTap"]!!.run(Env.root(host), listOf(Num(0.0), Num(0.0)))
+        assertEquals(listOf("location request"), host.actions)
+        assertTrue(compileError(src.replace("owl: 18", "owl: 17")).contains("needs owl 18"))
+        assertTrue(compileError(src.replace("\"request\"", "\"open\"")).contains("location takes request"))
+        assertTrue(compileError(src.replace("onTap: location", "text: location")).isNotEmpty())
+        // The permission dialog only for a tap: not as the finger goes down, not on a timer or a fetched value.
+        for (h in listOf("onPress", "onRelease")) assertTrue(compileError(src.replace("onTap", h)).contains("put it in onTap"))
+        assertTrue(compileError(src.replace(" Text {", " every 1m { location(\"request\") }\n Text {")).contains("not in a trigger"))
+        // A widget's own name for something else still compiles.
+        Compiler.compile("widget {\n meta { owl: 18 }\n let location = \"home\"\n Text { text: location } }")
+        // The store's reviewer sees it flagged.
+        assertEquals(listOf("knows roughly where the phone is; check where it sends that"), Review.risks(p.commands).map { it.removePrefix("command ").substringBefore(": ") })
+    }
+
+    @Test fun airpodsAskedForOnATap() {
+        val src = "widget {\n meta { owl: 18 }\n source a = android.airpods\n Text { text: a.granted ? a.mode : \"allow\"; onTap: airpods(\"request\") } }"
+        val p = Compiler.compile(src)
+        assertEquals("android.airpods", (p.globals.single() as Global.Source).kind)
+        assertEquals(listOf(AIRPODS_COMMAND), p.commands)
+        val host = TestHost(p)
+        (p.root.single() as WNode.Element).handlers["onTap"]!!.run(Env.root(host), listOf(Num(0.0), Num(0.0)))
+        assertEquals(listOf("airpods request"), host.actions)
+        // The permission dialog only for a tap: not as the finger goes down, not on a timer or a fetched value.
+        for (h in listOf("onPress", "onRelease")) assertTrue(compileError(src.replace("onTap", h)).contains("put it in onTap"))
+        assertTrue(compileError(src.replace(" Text {", " every 1m { airpods(\"request\") }\n Text {")).contains("not in a trigger"))
+        // The rest switch the AirPods from anywhere, a trigger too: they never ask.
+        Compiler.compile(src.replace(" Text {", " on a { airpods(\"anc\") }\n Text {").replace("onTap: airpods(\"request\")", "onPress: airpods(\"next\")"))
+        // airpods(...) alone, without the source, is listed too; and the store's reviewer sees it flagged.
+        assertEquals(listOf(AIRPODS_COMMAND), Compiler.compile("widget {\n meta { owl: 18 }\n Text { text: \"anc\"; onTap: airpods(\"anc\") } }").commands)
+        assertEquals(listOf("reads and changes the AirPods connected to the phone; check where it sends what it reads"), Review.risks(p.commands).map { it.removePrefix("command ").substringBefore(": ") })
+    }
+
     @Test fun keyNamesAndCombos() {
         assertEquals(KeyNames.Combo(1, emptyList()), KeyNames.combo("esc"))
         assertEquals(KeyNames.Combo(46, listOf(29)), KeyNames.combo("ctrl+c"))
@@ -1497,6 +1537,12 @@ class LangTest {
         compileError("widget {\n meta { owl: 17 }\n Box { onPull: refresh() } }").let { assertTrue(it, it.contains("onPull only works on Column and Grid")) }
     }
 
+    /** An Input of more lines wraps and grows with what's typed (owl 18). */
+    @Test fun inputLines() {
+        Compiler.compile("widget {\n meta { owl: 18 }\n state draft = \"\"\n Input { lines: 6; onChange: draft = value } }")
+        compileError("widget {\n meta { owl: 17 }\n Input { lines: 6 } }").let { assertTrue(it, it.contains("lines needs owl 18")) }
+    }
+
     /** ripple: false turns off the press shown on a node that takes taps (owl 14). */
     @Test fun rippleOff() {
         Compiler.compile("widget {\n meta { owl: 14 }\n state n = 0\n Box { ripple: false; onTap: n = n + 1 } }")
@@ -1699,6 +1745,8 @@ class LangTest {
 
 
     private val owl9 = "meta { owl: 9 }"
+
+    private val owl18 = "meta { owl: 18 }"
 
     private fun <T> inLocale(
         locale: Locale,
@@ -2026,5 +2074,117 @@ class LangTest {
         assertTrue(compileError("widget \"t\" {\n strings { en { a: \"a\" } }\n Text { text: str.a }\n}").contains("owl 16"))
         val warned = Compiler.compile("widget \"t\" {\n meta { owl: 16 }\n strings { en { a: \"a\"; b: \"b\" } id { a: \"x\" } }\n Text { text: str.a }\n}", "en").warnings
         assertEquals(listOf("3:2: id has no b, so those show in English"), warned)
+    }
+
+    @Test fun lockHoldsTheHomeScreenStill() {
+        val playing = "state playing = false\n Button { text: \"x\"; onTap: playing = !playing }"
+        assertTrue(compileError("widget {\n lock: playing\n $playing\n}").contains("lock needs owl 18: add meta { owl: 18 }"))
+        assertTrue(compileError("widget {\n meta { owl: 17 }\n lock: playing\n $playing\n}").contains("lock needs owl 18"))
+        val p = Compiler.compile("widget {\n meta { owl: 18 }\n lock: playing && true\n $playing\n}")
+        assertEquals(18, p.level)
+        assertTrue(p.lock != null)
+        // A face can hold it too, for its games.
+        assertTrue(Compiler.compile("face {\n meta { owl: 18 }\n lock: playing\n $playing\n}").lock != null)
+        // Something that changes: a fixed value would hold the screen whenever the page shows.
+        for (fixed in listOf("true", "false", "\"yes\"", "1")) {
+            val e = compileError("widget {\n meta { owl: 18 }\n lock: $fixed\n $playing\n}")
+            assertTrue(e, e.contains("lock holds the home screen still while what it says is true"))
+        }
+        // The action it once was isn't one.
+        assertTrue(compileError("widget {\n meta { owl: 18 }\n Button { text: \"x\"; onTap: lock(true) }\n}").contains("'lock' isn't an action"))
+        // An app has no home screen to hold.
+        assertTrue(compileError("app {\n meta { owl: 18 }\n lock: playing\n $playing\n}").contains("an app only takes"))
+        // A widget without one is as it was: no lock is no version to ask for.
+        assertEquals(1, Compiler.compile("widget {\n Column {\n Button { text: \"x\"; onTap: refresh() }\n Text { text: \"y\" } }\n}").level)
+        assertEquals(null, Compiler.compile("widget {\n Text { text: \"y\" }\n}").lock)
+    }
+
+    private fun browserWidget(body: String) = Compiler.compile("widget {\n $owl18\n $body\n}")
+
+    private fun browserError(body: String) = compileError("widget {\n $owl18\n $body\n}")
+
+    @Test fun browserNeedsItsLevel() {
+        assertTrue(compileError("widget {\n Browser { url: \"https://a.test/\" }\n}").contains("Browser needs owl 18: add meta { owl: 18 }"))
+        assertTrue(compileError("widget {\n meta { owl: 10 }\n Browser { url: \"https://a.test/\" }\n}").contains("Browser needs owl 18"))
+        assertEquals(18, browserWidget("Browser { url: \"https://a.test/\" }").level)
+        // Steered from a node that isn't one: the action came with the Browser.
+        assertTrue(compileError("widget {\n meta { owl: 10 }\n Text { text: \"x\"; onTap: web(\"back\") }\n}").contains("web needs owl 18"))
+    }
+
+    @Test fun browserNodeAndItsHandlers() {
+        val p = browserWidget("state t = \"\"\n Browser { url: \"https://a.test/weather\"; onNavigate: t = value; onTitle: t = value; onProgress: t = value }")
+        val el = p.root.single() as WNode.Element
+        assertEquals("Browser", el.kind)
+        assertTrue(p.browser)
+        assertEquals(false, p.terminal)
+        assertEquals(listOf("browser GET https://a.test/weather"), p.commands)
+        assertEquals(listOf("value"), el.handlers["onNavigate"]!!.params)
+        // The three handlers are a Browser's: nothing else has a page.
+        assertTrue(browserError("state t = \"\"\n Text { text: \"x\"; onTitle: t = value }").contains("onTitle only works on Browser"))
+    }
+
+    @Test fun browsersLoadHttpsOnlyAtAFixedHost() {
+        assertTrue(browserError("Browser { }").contains("a Browser needs a url"))
+        assertTrue(browserError("Browser { url: \"http://a.test/\" }").contains("a Browser loads over https only"))
+        for (bad in listOf("file:///sdcard/x.html", "content://com.android.providers/x", "javascript:alert(1)", "data:text/html,hi")) {
+            val e = browserError("Browser { url: \"$bad\" }")
+            assertTrue(e, e.contains("a Browser loads pages from the web"))
+        }
+        // A value in the URL goes through enc(), and the host is written out in the file.
+        assertTrue(browserError("state v = \"x\"\n Browser { url: \"https://a.test/${'$'}{lower(v)}\" }").contains("isn't put through enc()"))
+        assertTrue(browserError("state v = \"x\"\n Browser { url: \"https://${'$'}{enc(v)}/x\" }").contains("the server in this URL comes from a value"))
+        assertTrue(browserError("state v = \"x\"\n Browser { url: v }").contains("this URL is all a value"))
+        // js and zoom are the Browser's own, and go through as any property's value.
+        val p = browserWidget("state v = \"x\"\n Browser { url: \"https://a.test/${'$'}{enc(v)}\"; js: \"document.title\"; zoom: 1.5 }")
+        assertEquals(listOf("browser GET https://a.test/${Compiler.VALUE}"), p.commands)
+        assertTrue(browserError("Browser { url: \"https://a.test/\"; tabs: 2 }").contains("Browser has no property 'tabs'"))
+        // A page that's null until a source loads is no page: nothing to list, and nothing to check.
+        assertEquals(listOf("http GET https://a.test/"), browserWidget("source s = http(\"https://a.test/\") json\n Browser { url: null }").commands)
+    }
+
+    @Test fun twoBrowsersAtMost() {
+        assertEquals(
+            listOf("browser GET https://a.test/", "browser GET https://b.test/"),
+            browserWidget("Column {\n Browser { url: \"https://a.test/\" }\n Browser { url: \"https://b.test/\" }\n }").commands,
+        )
+        val e = browserError("Column {\n Browser { url: \"https://a.test/\" }\n Browser { url: \"https://b.test/\" }\n Browser { url: \"https://c.test/\" }\n }")
+        assertTrue(e, e.contains("a widget has room for 2 Browsers"))
+        assertTrue(e, e.contains("setting a Browser's url instead"))
+    }
+
+    @Test fun aBrowserGoesOnATileOrAFaceOnce() {
+        val page = "Browser { url: \"https://a.test/\" }"
+        // A face's own page is fine, as a tile's is.
+        assertEquals(listOf("browser GET https://a.test/"), Compiler.compile("face {\n $owl18\n $page\n}").commands)
+        // Its page is the node's: drawn once per item or per use, the copies would close each other's.
+        val inFor = browserError("state xs = [1, 2]\n Column {\n for x in xs { $page }\n }")
+        assertTrue(inFor, inFor.contains("a Browser can't go inside a for or a component"))
+        val inComponent = browserError("component Page() { $page }\n Page { }")
+        assertTrue(inComponent, inComponent.contains("a Browser can't go inside a for or a component"))
+        // Off home nothing gives its touches back or takes Back for its history.
+        val elsewhere = "a Browser goes on a widget's tile or a face"
+        assertTrue(browserError("Text { text: \"x\" }\n screen { $page }").contains(elsewhere))
+        assertTrue(compileError("app {\n $owl18\n $page\n}").contains(elsewhere))
+        assertTrue(compileError("panel {\n $owl18\n $page\n}").contains(elsewhere))
+    }
+
+    @Test fun webWithoutABrowserDoesntCompile() {
+        val e = browserError("Button { text: \"‹\"; onTap: web(\"back\") }")
+        assertTrue(e, e.contains("web(...) steers this file's Browser, and it has none"))
+        // Written before the Browser it steers is fine: it's checked once the whole file is.
+        browserWidget("Column {\n Button { text: \"‹\"; onTap: web(\"back\") }\n Browser { url: \"https://a.test/\" }\n }")
+    }
+
+    @Test fun webSteersABrowser() {
+        val p = browserWidget("state t = \"\"\n Browser { url: \"https://a.test/\"; onNavigate: t = value; onTap: web(\"reload\") }")
+        val host = TestHost(p)
+        val el = p.root.single() as WNode.Element
+        el.handlers["onTap"]!!.run(Env.root(host), emptyList())
+        assertEquals(listOf("web reload"), host.actions)
+        el.handlers["onNavigate"]!!.run(Env.root(host), listOf(Str("https://a.test/next")))
+        assertEquals(Str("https://a.test/next"), host.slots[0])
+        // The word is one of four, and there's one of it.
+        assertTrue(browserError("Browser { url: \"https://a.test/\"; onTap: web(\"sideways\") }").contains("web takes back, forward, reload, stop"))
+        assertTrue(browserError("Browser { url: \"https://a.test/\"; onTap: web(\"back\", 2) }").contains("web takes 1-1 values"))
     }
 }

@@ -27,7 +27,7 @@ class Compiler private constructor(
          * instead of failing on what they don't know. Bump it with every
          * addition a widget could depend on: nodes, properties, builtins.
          */
-        const val LEVEL = 17
+        const val LEVEL = 18
         private const val MAX_ASSET_BYTES = 2 shl 20
 
         /** Pages as far out as a file can ask for; past Int's range, the pages either side of them would wrap. */
@@ -60,6 +60,9 @@ class Compiler private constructor(
         const val NUMBER = "‹number›"
 
         private const val MAX_SHAPES = 8
+
+        /** Each Browser is a web view of its own: a tile has room for two. */
+        private const val MAX_BROWSERS = 2
 
         private val TIME_WORD = Regex("""\btime\b""")
 
@@ -232,6 +235,19 @@ class Compiler private constructor(
     private var guest = false
     private var animated = false
     private var terminal = false
+    private var browser = false
+
+    /** Browsers so far, against [MAX_BROWSERS]. */
+    private var browsers = 0
+
+    /** Where the first web(...) is, checked against [browser] once every node is compiled. */
+    private var webAt: Int? = null
+
+    /**
+     * Inside a `for` or a component's body: what's written there once is drawn as many times as it's used, every copy
+     * the same node. A Browser can't go there: its page belongs to the node, so the copies would close each other's.
+     */
+    private var repeated = 0
     private var nodes = 0
     private var maxNodes = MAX_NODES
 
@@ -357,13 +373,20 @@ class Compiler private constructor(
         val background = props["background"]?.let { if (gradient(it.value)) since(GRADIENT_BACKGROUND, it.pos); ex(it.value, root) }
         // Whether the status bar stays over a face, read as it changes: a face can hide it for a game and bring it back.
         val statusBar = props["statusBar"]?.let { ex(it.value, root) }
+        // Whether the home screen holds still around the tile, read as it changes: a game holds it while it's played. A
+        // constant would hold it whenever the page shows, so it has to be something that changes, like a state.
+        val lock =
+            props["lock"]?.let { p ->
+                since(HOME_LOCK, p.pos)
+                ex(p.value, root).also { if (it.const != null) fail("lock holds the home screen still while what it says is true, so it's something that changes, like lock: playing, not a fixed value", p.pos) }
+            }
         // Drawn under the status bar and a camera cutout: fixed in the file, since the whole face moves when it changes.
         val edge =
             props["edge"]?.let { p ->
                 since(FACE_EDGE, p.pos)
                 ((p.value as? Expr.Lit)?.value as? Bool)?.v ?: fail("edge is true or false, not an expression", p.pos)
             } ?: false
-        checkLevel(level)
+        finish(level)
 
         return Program(
             name = ast.name ?: "widget",
@@ -371,6 +394,7 @@ class Compiler private constructor(
             level = level,
             size = props["size"]?.let { cells(it) },
             statusBar = statusBar,
+            lock = lock,
             edge = edge,
             kind = ast.kind,
             minSize = props["minSize"]?.let { cells(it) } ?: (1 to 1),
@@ -393,13 +417,16 @@ class Compiler private constructor(
             programs = scripts.flatMap(ShellWords::programs).toSortedSet(),
             animated = animated,
             terminal = terminal,
+            browser = browser,
             nodeCount = tileNodes,
         )
     }
 
     /** Declared, so a launcher too old for a feature says "update the launcher" instead of failing on an unknown name. */
-    private fun checkLevel(level: Int) {
+    /** Checks what can only be told once the whole file is compiled: the level it declares, and a web(...) with no page to steer. */
+    private fun finish(level: Int) {
         needs?.let { (v, feature, pos) -> if (level < v) fail("$feature needs owl $v: add meta { owl: $v }", pos) }
+        webAt?.let { if (!browser) fail("web(...) steers this file's Browser, and it has none: add Browser { url: \"https://host/page\" }", it) }
     }
 
     /**
@@ -456,7 +483,7 @@ class Compiler private constructor(
         val title = body.props.firstOrNull { it.name == "title" }?.let { ex(it.value, root) }
         val back = backProp?.let { ex(it.value, root) }
         val onBack = onBackHandler?.let { handler(it, root) }
-        checkLevel(level)
+        finish(level)
         return Program(
             name = ast.name ?: "app",
             meta = meta,
@@ -477,6 +504,7 @@ class Compiler private constructor(
             programs = scripts.flatMap(ShellWords::programs).toSortedSet(),
             animated = animated,
             terminal = terminal,
+            browser = browser,
             nodeCount = nodes,
             kind = ast.kind,
             icon = icon,
@@ -529,7 +557,7 @@ class Compiler private constructor(
                 since(PANEL_KEYBOARD, it.pos)
                 ((it.value as? Expr.Lit)?.value as? Bool)?.v ?: fail("keyboard is true or false, not an expression", it.pos)
             } ?: true
-        checkLevel(level)
+        finish(level)
         return Program(
             name = ast.name ?: "panel",
             meta = meta,
@@ -578,7 +606,7 @@ class Compiler private constructor(
         val tree = items(body.items, root, Children.UI)
         if (tree.isEmpty()) fail("a key bar needs at least one node, like Button { text: \"esc\"; onPress: pressKey(\"esc\") }", 0)
         (screenAction ?: openScreen)?.let { fail("screen() and close() open and close a widget's screen { }; the key bar comes and goes with the keyboard", it) }
-        checkLevel(level)
+        finish(level)
         return Program(
             name = ast.name ?: "keybar",
             meta = meta,
@@ -684,6 +712,37 @@ class Compiler private constructor(
                 else -> null
             }
         return out?.let(::capped)
+    }
+
+    /**
+     * A Browser's url: a page from the web, at a host written out in the file, so the review can list it as
+     * "browser GET <url>" the way it lists http(...). https only: file:, content:, javascript: and data: say
+     * where a file is or run code, and http sends the page in the clear. Its values follow the same rule as a
+     * URL's anywhere: enc() around each, and none of them the host.
+     */
+    private fun browserUrl(
+        e: Expr,
+        ev: Ev,
+        s: Scope,
+    ) {
+        // Each way it can turn out: url: ready ? "https://a.test/" : "https://a.test/start".
+        if (e is Expr.Cond) return listOf(e.a, e.b).forEach { browserUrl(it, ex(it, s), s) }
+        val whole = constText(e, s)
+        val start = whole ?: constantStart(e, s)
+        if (start.startsWith("http://")) fail("a Browser loads over https only", e.pos)
+        if (start.isNotEmpty() && !start.startsWith("https://")) {
+            fail("a Browser loads pages from the web, so https:// only: not file:, content:, javascript: or data:", e.pos)
+        }
+        // A page that's null loads nothing: nothing to check, and nothing to list.
+        if (ev.const == Null) return
+        val listed =
+            whole?.let { listOf(it) }
+                ?: shapes(e, s, "enc")?.takeIf { it.isNotEmpty() && it.all(FIXED_HOST::containsMatchIn) }
+        if (listed == null) {
+            val (msg, pos) = urlWarning(e, s) ?: ("a Browser's url is https:// at a host written in the file, with its values put through enc()" to e.pos)
+            fail(msg, pos)
+        }
+        listed.forEach { commands += "browser GET $it" }
     }
 
     /**
@@ -844,6 +903,8 @@ class Compiler private constructor(
                 if (e.name == "recent") commands += "read the recently opened apps"
                 if (e.name == "drawer") commands += "read the launcher's apps (names and icons)"
                 if (e.name == "speech") commands += "listen through the microphone after a tap, and read what you say"
+                if (e.name == "location") commands += "read the phone's approximate location, once you allow it"
+                if (e.name == "airpods") commands += AIRPODS_COMMAND
                 Global.Source(d.name, "android.${e.name}", null, (every ?: 60.0).coerceAtLeast(1.0), false, 0)
             }
             else -> fail("a source is cmd(\"...\"), stream(\"...\"), http(\"...\"), file(\"...\"), clock, or android.${ANDROID.joinToString("/")}", e.pos)
@@ -977,7 +1038,12 @@ class Compiler private constructor(
         if (body.props.isNotEmpty() || body.handlers.isNotEmpty()) fail("a component's body holds nodes; put properties on a node inside it", d.pos)
         val scope = Scope(root, d.params.map { it.first })
         val defaults = d.params.map { (_, def) -> def?.let { ex(it, root) } }
-        return Component(d.params.map { it.first }, defaults, items(body.items, scope, Children.UI))
+        repeated++
+        try {
+            return Component(d.params.map { it.first }, defaults, items(body.items, scope, Children.UI))
+        } finally {
+            repeated--
+        }
     }
 
     // Items
@@ -1024,7 +1090,14 @@ class Compiler private constructor(
                 noProps(it.body, "for")
                 val list = ex(it.list, scope)
                 val inner = Scope(scope, listOfNotNull(it.name, it.index ?: "\u0000index"))
-                WNode.For(list, it.key?.let { k -> ex(k, inner) }, items(it.body.items, inner, mode), it.pos)
+                repeated++
+                val body =
+                    try {
+                        items(it.body.items, inner, mode)
+                    } finally {
+                        repeated--
+                    }
+                WNode.For(list, it.key?.let { k -> ex(k, inner) }, body, it.pos)
             }
             is Item.Let -> error("lets are gathered by items()")
             is Item.Call -> {
@@ -1137,6 +1210,19 @@ class Compiler private constructor(
                 listCommand(body.props.first { it.name == "command" }.value, command, scope, "Terminal command")
             }
             guest = true
+        }
+        if (n.type == "Browser") {
+            browser = true
+            if (repeated > 0) fail("a Browser can't go inside a for or a component: its page is the node's, so each copy would close the others'; write it out, two at most", n.pos)
+            // A home tile's or a face's only: elsewhere nothing gives its touches back to home or lets Back reach its history.
+            if (inScreen != false || (ast.kind != OwlKind.Widget && ast.kind != OwlKind.Face)) {
+                fail("a Browser goes on a widget's tile or a face, not in a screen { }, an app, a panel or the key bar", n.pos)
+            }
+            if (++browsers > MAX_BROWSERS) {
+                fail("a widget has room for $MAX_BROWSERS Browsers, each a web view of its own: show another page by setting a Browser's url instead", n.pos)
+            }
+            val url = body.props.firstOrNull { it.name == "url" } ?: fail("a Browser needs a url: \"https://host/page\"", n.pos)
+            browserUrl(url.value, props.getValue("url"), scope)
         }
         if (n.type == "Image") body.props.firstOrNull { it.name == "src" }?.let { webFile(it.value, scope, "image") }
         // A shader animates only if its code reads `time`; code that's worked out at run time might.
@@ -1321,6 +1407,7 @@ class Compiler private constructor(
                     if ("${call.name}(\"$c\")" in SINCE) since("${call.name}(\"$c\")", call.pos)
                 }
                 since(call.name, call.pos)
+                if (call.name == "web" && webAt == null) webAt = call.pos
                 // notification(...) with one value or three is a word from owl 13, even when the word isn't written out.
                 if (call.name == "notification" && call.args.size != 2) since("notification(\"action\")", call.pos)
                 // A written-out brightness; one from a value, like a Slider's, can't be told from on and off here.
@@ -1360,6 +1447,19 @@ class Compiler private constructor(
                     }
                     // The microphone opens only for a touch, never on a timer or a fetched value.
                     if (TriggerKind.entries.any { it.word == handlerName } && word != null && word !in SPEECH_ANYWHERE) fail("speech(\"$word\") works in onTap, not in a trigger; stop and cancel work anywhere", call.pos)
+                }
+                if (call.name == "location") {
+                    // The permission dialog covers the widget before the finger lifts, and comes only for a touch.
+                    if (handlerName == "onPress" || handlerName == "onRelease") fail("location(\"request\") opens Android's permission dialog over the widget before the finger lifts: put it in onTap", call.pos)
+                    if (TriggerKind.entries.any { it.word == handlerName }) fail("location(\"request\") works in onTap, not in a trigger: Android asks only when you tap", call.pos)
+                }
+                if (call.name == "airpods") {
+                    commands += AIRPODS_COMMAND
+                    // Asking for Bluetooth, like the location: only for a tap, after the finger lifts.
+                    if ((args.getOrNull(0)?.const as? Str)?.v == "request") {
+                        if (handlerName == "onPress" || handlerName == "onRelease") fail("airpods(\"request\") opens Android's permission dialog over the widget before the finger lifts: put it in onTap", call.pos)
+                        if (TriggerKind.entries.any { it.word == handlerName }) fail("airpods(\"request\") works in onTap, not in a trigger: Android asks only when you tap", call.pos)
+                    }
                 }
                 if (call.name == "latch") (args.getOrNull(1)?.const as? Str)?.v?.let { if (it !in KeyNames.hows) fail("latch's second value is ${KeyNames.hows.joinToString()}", call.args[1].pos) }
                 if (call.name == "screen" || call.name == "close") screenAction = screenAction ?: call.pos
