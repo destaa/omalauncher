@@ -37,6 +37,28 @@ class Proot(
     /** How guest apps render OpenGL and Vulkan: in software, or on the GPU once [Gpu] turns it on. */
     @Volatile var graphicsEnv: List<String> = SOFTWARE_ENV
 
+    /**
+     * The microSD (and any further removable volume) as the guest sees it:
+     * /microsd, /microsd2, …; /sdcard stays internal storage.
+     *
+     * The card's root is derived from the app's own directory on it
+     * (/storage/XXXX-XXXX/Android/data/<pkg>/files): getExternalFilesDirs lists
+     * every mounted volume, and all-files access (MainActivity asks for it)
+     * lets the guest read and write the card. A card inserted after the
+     * launcher started needs a restart to show up; at boot it is there.
+     */
+    private val sdCardBinds: List<Pair<String, File>> =
+        context.getExternalFilesDirs(null)
+            .filterNotNull()
+            .mapNotNull { dir ->
+                var f: File? = dir
+                while (f != null && f.name != "Android") f = f.parentFile
+                f?.parentFile
+            }
+            .filter { it.path.startsWith("/storage/") && it.path != "/storage/emulated/0" }
+            .distinctBy { it.path }
+            .mapIndexed { i, root -> (if (i == 0) "/microsd" else "/microsd${i + 1}") to root }
+
     /** Launcher data the guest sees in its home, kept outside the rootfs; see [LauncherData]. */
     private val dataBinds =
         listOf(
@@ -47,7 +69,7 @@ class Proot(
             "$GUEST_HOME/.config/omarchy/themes" to LauncherData.userThemesDir(context),
             "$GUEST_HOME/.config/omarchy/backgrounds" to LauncherData.userBackgroundsDir(context),
             "/sdcard" to File("/storage/emulated/0"),
-        )
+        ) + sdCardBinds
 
     /**
      * Android's Chinese, Japanese and Korean font, which the guest has none of (Arch's is ~300 MB).
@@ -109,6 +131,8 @@ class Proot(
             host.mkdirs()
             if (rootfs.isDirectory) File(rootfs, guest.removePrefix("/")).mkdirs()
         }
+        // /microsd stays a directory even without a card, so it can be listed.
+        if (rootfs.isDirectory) File(rootfs, "microsd").mkdirs()
         File(rootfs, "var/lib/pacman/db.lck").delete()
         // An empty stand-in, so fontconfig lists the bound font when it reads the directory.
         if (rootfs.isDirectory) {
