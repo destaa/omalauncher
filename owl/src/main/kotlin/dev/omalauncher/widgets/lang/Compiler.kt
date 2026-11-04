@@ -904,6 +904,7 @@ class Compiler private constructor(
                 if (e.name == "drawer") commands += "read the launcher's apps (names and icons)"
                 if (e.name == "speech") commands += "listen through the microphone after a tap, and read what you say"
                 if (e.name == "location") commands += "read the phone's approximate location, once you allow it"
+                if (e.name == "calendar") commands += "read events in the phone's calendars, once you allow it"
                 if (e.name == "airpods") commands += AIRPODS_COMMAND
                 Global.Source(d.name, "android.${e.name}", null, (every ?: 60.0).coerceAtLeast(1.0), false, 0)
             }
@@ -1025,13 +1026,15 @@ class Compiler private constructor(
     }
 
     /** The names of the sources that read android.speech: speech(...) needs one, and `on said.final` may type. */
-    private val speechSources by lazy {
+    private val speechSources by lazy { androidSources("speech") }
+
+    /** The names of the sources that read android.[name]. */
+    private fun androidSources(name: String) =
         ast.body.decls
             .filterIsInstance<Decl.Source>()
-            .filter { (it.expr as? Expr.Member)?.let { m -> m.name == "speech" && (m.e as? Expr.Name)?.name == "android" } == true }
+            .filter { (it.expr as? Expr.Member)?.let { m -> m.name == name && (m.e as? Expr.Name)?.name == "android" } == true }
             .map { it.name }
             .toSet()
-    }
 
     private fun component(d: Decl.Component): Component {
         val body = d.body
@@ -1448,18 +1451,14 @@ class Compiler private constructor(
                     // The microphone opens only for a touch, never on a timer or a fetched value.
                     if (TriggerKind.entries.any { it.word == handlerName } && word != null && word !in SPEECH_ANYWHERE) fail("speech(\"$word\") works in onTap, not in a trigger; stop and cancel work anywhere", call.pos)
                 }
-                if (call.name == "location") {
+                if (call.name == "airpods") commands += AIRPODS_COMMAND
+                if (call.name in ASKS && (args.getOrNull(0)?.const as? Str)?.v == "request") {
+                    val ask = "${call.name}(\"request\")"
+                    // Asking for what nothing reads: what it allows is only in the source.
+                    if (androidSources(call.name).isEmpty()) fail("$ask asks for what source x = android.${call.name} reads: declare it, then x.granted says whether it's allowed", call.pos)
                     // The permission dialog covers the widget before the finger lifts, and comes only for a touch.
-                    if (handlerName == "onPress" || handlerName == "onRelease") fail("location(\"request\") opens Android's permission dialog over the widget before the finger lifts: put it in onTap", call.pos)
-                    if (TriggerKind.entries.any { it.word == handlerName }) fail("location(\"request\") works in onTap, not in a trigger: Android asks only when you tap", call.pos)
-                }
-                if (call.name == "airpods") {
-                    commands += AIRPODS_COMMAND
-                    // Asking for Bluetooth, like the location: only for a tap, after the finger lifts.
-                    if ((args.getOrNull(0)?.const as? Str)?.v == "request") {
-                        if (handlerName == "onPress" || handlerName == "onRelease") fail("airpods(\"request\") opens Android's permission dialog over the widget before the finger lifts: put it in onTap", call.pos)
-                        if (TriggerKind.entries.any { it.word == handlerName }) fail("airpods(\"request\") works in onTap, not in a trigger: Android asks only when you tap", call.pos)
-                    }
+                    if (handlerName == "onPress" || handlerName == "onRelease") fail("$ask opens Android's permission dialog over the widget before the finger lifts: put it in onTap", call.pos)
+                    if (TriggerKind.entries.any { it.word == handlerName }) fail("$ask works in onTap, not in a trigger: Android asks only when you tap", call.pos)
                 }
                 if (call.name == "latch") (args.getOrNull(1)?.const as? Str)?.v?.let { if (it !in KeyNames.hows) fail("latch's second value is ${KeyNames.hows.joinToString()}", call.args[1].pos) }
                 if (call.name == "screen" || call.name == "close") screenAction = screenAction ?: call.pos

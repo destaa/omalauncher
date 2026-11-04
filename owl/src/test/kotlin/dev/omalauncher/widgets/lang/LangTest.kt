@@ -821,6 +821,38 @@ class LangTest {
         assertEquals("[1, 2, 3]", text("matchAll(s, \"\\\\d\")", "state s = \"1a2b3\""))
     }
 
+    /** Many matches in one update share one allowance: a map of them, each well under half a second, held home past Android's five seconds. */
+    @Test fun regexesShareOneUpdatesTime() {
+        val p =
+            Compiler.compile(
+                "widget \"t\" {\nstate n = 10\nstate k = 1\n" +
+                    "Text { text: map(range(k), i => match(pad(\"\", n, \"a\"), \"(.*a){4}b\")) }\n}",
+            )
+        val host = TestHost(p)
+        val ev = (p.root.single() as WNode.Element).props["text"]!!
+
+        fun timed(): Long {
+            val started = System.nanoTime()
+            host.budget.eval(ev, Env.root(host))
+            return (System.nanoTime() - started) / 1_000_000
+        }
+        // A text long enough that one match takes a while, on this machine, but gives up on its own.
+        while (timed() < 60) host.slots[0] = Num((host.slots[0] as Num).v + 4)
+        host.slots[1] = Num(40.0)
+        val started = System.nanoTime()
+        try {
+            host.budget.eval(ev, Env.root(host))
+            fail("expected the matches to give up together")
+        } catch (e: WidgetError) {
+            assertTrue(e.message, e.message!!.contains("in all in one update"))
+        }
+        // Over 40 times 60 ms before.
+        assertTrue((System.nanoTime() - started) / 1_000_000 < 1800)
+        // The pattern isn't refused, and the next update has its own allowance.
+        host.slots[1] = Num(1.0)
+        assertEquals("[null]", host.budget.eval(ev, Env.root(host)).toString())
+    }
+
     /** A font in spans is listed for review like a `font:`, in a Text and in a Canvas text. */
     @Test fun fontsInSpansAreListed() {
         val p =
@@ -1241,10 +1273,35 @@ class LangTest {
         // The permission dialog only for a tap: not as the finger goes down, not on a timer or a fetched value.
         for (h in listOf("onPress", "onRelease")) assertTrue(compileError(src.replace("onTap", h)).contains("put it in onTap"))
         assertTrue(compileError(src.replace(" Text {", " every 1m { location(\"request\") }\n Text {")).contains("not in a trigger"))
+        assertTrue(compileError("widget {\n meta { owl: 18 }\n Text { text: \"where?\"; onTap: location(\"request\") } }").contains("declare it"))
         // A widget's own name for something else still compiles.
         Compiler.compile("widget {\n meta { owl: 18 }\n let location = \"home\"\n Text { text: location } }")
         // The store's reviewer sees it flagged.
         assertEquals(listOf("knows roughly where the phone is; check where it sends that"), Review.risks(p.commands).map { it.removePrefix("command ").substringBefore(": ") })
+    }
+
+    @Test fun androidCalendarAskedForOnATap() {
+        val src = "widget {\n meta { owl: 18 }\n source agenda = android.calendar\n Text { text: agenda.granted ? \"events\" : \"allow\"; onTap: calendar(\"request\") } }"
+        val p = Compiler.compile(src)
+        assertEquals("android.calendar", (p.globals.single() as Global.Source).kind)
+        assertEquals(listOf("read events in the phone's calendars, once you allow it"), p.commands)
+        val host = TestHost(p)
+        (p.root.single() as WNode.Element).handlers["onTap"]!!.run(Env.root(host), listOf(Num(0.0), Num(0.0)))
+        assertEquals(listOf("calendar request"), host.actions)
+        assertTrue(compileError(src.replace("owl: 18", "owl: 17")).contains("needs owl 18"))
+        assertTrue(compileError(src.replace("\"request\"", "\"close\"")).contains("calendar takes request or open"))
+        // Opening needs no permission, and works with an event or without, on today.
+        val open = Compiler.compile(src.replace("calendar(\"request\")", "calendar(\"open\", agenda.events[0])"))
+        val openHost = TestHost(open)
+        (open.root.single() as WNode.Element).handlers["onTap"]!!.run(Env.root(openHost), listOf(Num(0.0), Num(0.0)))
+        assertEquals(1, openHost.actions.size)
+        assertTrue(openHost.actions.single().startsWith("calendar open"))
+        Compiler.compile(src.replace("calendar(\"request\")", "calendar(\"open\")"))
+        Compiler.compile(src.replace(" source agenda = android.calendar\n", "").replace("agenda.granted", "true").replace("\"request\"", "\"open\""))
+        for (h in listOf("onPress", "onRelease")) assertTrue(compileError(src.replace("onTap", h)).contains("put it in onTap"))
+        assertTrue(compileError(src.replace(" Text {", " every 1m { calendar(\"request\") }\n Text {")).contains("not in a trigger"))
+        assertTrue(compileError(src.replace(" source agenda = android.calendar\n", "").replace("agenda.granted", "true")).contains("declare it"))
+        assertEquals(listOf("sees calendar event titles, times and locations; check nothing sends them elsewhere"), Review.risks(p.commands).map { it.removePrefix("command ").substringBefore(": ") })
     }
 
     @Test fun airpodsAskedForOnATap() {
@@ -1258,6 +1315,7 @@ class LangTest {
         // The permission dialog only for a tap: not as the finger goes down, not on a timer or a fetched value.
         for (h in listOf("onPress", "onRelease")) assertTrue(compileError(src.replace("onTap", h)).contains("put it in onTap"))
         assertTrue(compileError(src.replace(" Text {", " every 1m { airpods(\"request\") }\n Text {")).contains("not in a trigger"))
+        assertTrue(compileError("widget {\n meta { owl: 18 }\n Text { text: \"allow\"; onTap: airpods(\"request\") } }").contains("declare it"))
         // The rest switch the AirPods from anywhere, a trigger too: they never ask.
         Compiler.compile(src.replace(" Text {", " on a { airpods(\"anc\") }\n Text {").replace("onTap: airpods(\"request\")", "onPress: airpods(\"next\")"))
         // airpods(...) alone, without the source, is listed too; and the store's reviewer sees it flagged.

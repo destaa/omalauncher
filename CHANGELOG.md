@@ -4,8 +4,19 @@ The most important changes in each release. The Play Store notes for a release
 are in `fastlane/metadata/android/en-US/changelogs/<versionCode>.txt`.
 Dates are when the build was uploaded to Play.
 
-## Unreleased
+## 0.19.0 (versionCode 30) – 2026-11-04
 
+- Browser tiles: a widget or face can show a web page in a tile of its own, drawn by
+  Android's System WebView, https only and only at hosts written in the file, script off
+  unless `js: true`. `onNavigate`, `onTitle` and `onProgress` follow the page and
+  `web("back" | "forward" | "reload" | "stop")` steers it; a page's script waits while
+  the launcher is behind another app or the screen is off (#255).
+- A widget or face can hold the home screen still with `lock: mode == "play"`: while it's
+  true the page turn, the swipe up and the long press stop, and a chip, Back or the widget
+  stopping always give the screen back (#254).
+- An `Input` takes `lines: 6`: what's typed wraps, the field grows up to that many lines and
+  then scrolls, as a chat's message box. With `onSubmit`, Enter sends and Shift+Enter starts
+  a new line (#248).
 - Widgets can show and change AirPods: owl 18's `android.airpods` has each bud's and
   the case's battery, which buds are in, the listening mode and the settings, read
   over the AirPods' own link as Apple's devices do, and `airpods(...)` switches
@@ -13,6 +24,21 @@ Dates are when the build was uploaded to Play.
   and the rest on and off; `examples/airpods.owl` shows them. `airpods("request")`
   from a tap asks for the Bluetooth permission, and only on Android 17 (16 QPR3 on a
   Pixel), which it needs; elsewhere `supported` is false and nothing asks.
+- Widgets can know roughly where the phone is: owl 18's `android.location` gives an
+  approximate place (a kilometre or two), only once `location("request")` from a tap
+  has allowed it, and only while the widget shows. The bundled today widget has "use my
+  location" for its weather; a typed city still wins.
+- Widgets can show the phone's calendars: owl 18's `android.calendar` lists the next 14
+  days of events, local and synced, each time of a repeating one on its own, without
+  cancelled ones or those you declined, once `calendar("request")` from a tap has
+  allowed it. All-day events run midnight to midnight wherever the phone is, each event
+  has its color, and `calendar("open", e)` opens one in the calendar app.
+  `examples/calendar.owl` shows the next events.
+- Voice talks to Oh My Pi (over ACP) and Pi (over its RPC mode) too.
+- Fixes: a widget command printing hundreds of megabytes no longer runs the launcher out of
+  memory (its output stops at 4 MB); many regex matches in one widget update can't add up to
+  a freeze; Voice no longer crashes in landscape with the keyboard up; a widget's preview is
+  saved off the main thread.
 
 ## 0.18.0 (versionCode 29) – 2026-11-01
 
