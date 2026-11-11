@@ -15,16 +15,22 @@ jobs:
         uses: android-actions/setup-android@v4
       - name: Install bsdtar & fetch proot
         run: |
-          # bsdtar unpacks Termux's packages, whose .deb are ar archives. Ubuntu's mirrors have been
-          # unreachable from runners ("Temporary failure resolving 'archive.ubuntu.com'"), which failed
-          # the build before it compiled anything, so a failure here falls back to a Python stand-in
-          # (scripts/bsdtar-fallback.py) that reads the same ar and zip archives.
-          if ! { sudo apt-get update -q && sudo apt-get install -yq libarchive-tools; }; then
-            echo "::warning::libarchive-tools could not be installed; using scripts/bsdtar-fallback.py as bsdtar"
+          # bsdtar unpacks Termux's packages, whose .deb are ar archives, and patch applies proot's
+          # patches/. Ubuntu's mirrors have been unreachable from runners ("Temporary failure resolving
+          # 'archive.ubuntu.com'"), which failed the build before it compiled anything, so a failure here
+          # falls back to a Python stand-in (scripts/bsdtar-fallback.py) that reads the same ar and zip
+          # archives, and to git's own apply for the patches.
+          if ! { sudo apt-get update -q && sudo apt-get install -yq libarchive-tools patch; }; then
+            echo "::warning::libarchive-tools and patch could not be installed; falling back to Python and git apply"
             mkdir -p "$RUNNER_TEMP/bin"
             printf '#!/bin/sh\nexec python3 %s "$@"\n' "$GITHUB_WORKSPACE/scripts/bsdtar-fallback.py" > "$RUNNER_TEMP/bin/bsdtar"
             chmod +x "$RUNNER_TEMP/bin/bsdtar"
+            # patch -d DIR -p1 --quiet < p, as fetch-proot.sh runs it, through git apply in that directory.
+            printf '#!/bin/sh\nwhile [ $# -gt 0 ]; do case "$1" in -d) cd "$2" || exit 1; shift 2;; -p) shift 2;; --quiet) shift;; *) break;; esac; done\nexec git apply -p1 -\n' > "$RUNNER_TEMP/bin/patch"
+            chmod +x "$RUNNER_TEMP/bin/patch"
             echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+            # Also for the rest of this step: GITHUB_PATH only reaches the ones after it.
+            export PATH="$RUNNER_TEMP/bin:$PATH"
           fi
           # The NDK the script builds proot with, as upstream's release.yml installs it.
           ndk=$(sed -n 's/^NDK_VERSION=//p' scripts/fetch-proot.sh)
