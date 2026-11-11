@@ -15,7 +15,17 @@ jobs:
         uses: android-actions/setup-android@v4
       - name: Install bsdtar & fetch proot
         run: |
-          sudo apt-get update -q && sudo apt-get install -yq libarchive-tools
+          # bsdtar unpacks Termux's packages, whose .deb are ar archives. Ubuntu's mirrors have been
+          # unreachable from runners ("Temporary failure resolving 'archive.ubuntu.com'"), which failed
+          # the build before it compiled anything, so a failure here falls back to a Python stand-in
+          # (scripts/bsdtar-fallback.py) that reads the same ar and zip archives.
+          if ! { sudo apt-get update -q && sudo apt-get install -yq libarchive-tools; }; then
+            echo "::warning::libarchive-tools could not be installed; using scripts/bsdtar-fallback.py as bsdtar"
+            mkdir -p "$RUNNER_TEMP/bin"
+            printf '#!/bin/sh\nexec python3 %s "$@"\n' "$GITHUB_WORKSPACE/scripts/bsdtar-fallback.py" > "$RUNNER_TEMP/bin/bsdtar"
+            chmod +x "$RUNNER_TEMP/bin/bsdtar"
+            echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          fi
           # The NDK the script builds proot with, as upstream's release.yml installs it.
           ndk=$(sed -n 's/^NDK_VERSION=//p' scripts/fetch-proot.sh)
           echo "NDK=$ndk ANDROID_HOME=$ANDROID_HOME"
