@@ -125,6 +125,7 @@ class AgentsTest {
         stub("amp", "cat")
         assertEquals(prompt + "\n", run(agentInvocation("amp", prompt)))
         dir.deleteRecursively()
+    }
 
     /** mise leaves a removed tool's shim behind, and the agents screen reads the shim: removing deletes it. */
     @Test fun removingAnAgentDeletesItsShim() {
