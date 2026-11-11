@@ -177,7 +177,16 @@ internal val SINCE =
         // owl 18: AirPods, read and set over their own link, with the Bluetooth permission.
         listOf("android.airpods", "airpods").associateWith { 18 } +
         // owl 18: events in the phone's calendars, only after a tap asks for read access.
-        listOf("android.calendar", "calendar").associateWith { 18 }
+        listOf("android.calendar", "calendar").associateWith { 18 } +
+        // owl 19: how many frames a second an animation needs, so a slow one costs the battery less.
+        mapOf(FRAME_RATE to 19) +
+        // owl 21: how the phone is tilted, for tilt games and spirit levels.
+        mapOf("android.motion" to 21) +
+        // owl 21: statements each frame, for games that move things by what they were a frame before.
+        mapOf(EVERY_FRAME to 21)
+
+/** `every frame { }`, named like this in [SINCE]. */
+internal const val EVERY_FRAME = "every frame"
 
 /** `strings { ... }`, named like this in [SINCE]. */
 internal const val STRINGS_DECL = "strings { }"
@@ -224,6 +233,12 @@ internal const val QUERY = "query"
 internal const val GRADIENT_BACKGROUND = "a gradient background"
 
 internal const val APP_STATUS_BAR = "an app's statusBar"
+
+/** `fps:` on a widget, face, app or panel, named like this in [SINCE]. */
+internal const val FRAME_RATE = "fps"
+
+/** The most frames a second `fps:` asks for, and what an animation gets without it. */
+const val MAX_FPS = 60
 
 /** A widget's or a face's `lock:`, named like this in [SINCE]. */
 internal const val HOME_LOCK = "lock"
@@ -309,7 +324,7 @@ val SPEECH_ANYWHERE = setOf("stop", "cancel")
 val ASKS = setOf("location", "calendar", "airpods")
 
 /** Data from the phone and the launcher; device is fixed, system, network and power are polled, the rest update as they change. */
-internal val ANDROID = setOf("battery", "device", "media", "notifications", "volume", "system", "network", "power", "sim", "alarm", "modes", "apps", "agents", "recent", "drawer", "modifiers", "speech", "location", "airpods", "calendar")
+internal val ANDROID = setOf("battery", "device", "media", "notifications", "volume", "system", "network", "power", "sim", "alarm", "modes", "apps", "agents", "recent", "drawer", "modifiers", "speech", "location", "airpods", "calendar", "motion")
 
 /**
  * The words an action's first value may be, when it's written out; [numbers] also allows a number. [forms] are the
@@ -391,7 +406,7 @@ internal val TILE = setOf("cols", "rows", "tileWidth", "tileHeight", "screenWidt
 /** Builtins that always give a number (or null, which reads as …). */
 internal val NUMBERS = setOf("int", "round", "floor", "ceil", "abs", "fixed", "len", "count", "sum", "min", "max", "clamp")
 
-internal val WIDGET_PROPS = setOf("size", "minSize", "page", "order", "padding", "background", "lock")
+internal val WIDGET_PROPS = setOf("size", "minSize", "page", "order", "padding", "background", "lock", "fps")
 
 /** A face has no tile's size; it says where it goes and whether the status bar stays over it. */
-internal val FACE_PROPS = setOf("page", "order", "padding", "background", "statusBar", "edge", "lock")
+internal val FACE_PROPS = setOf("page", "order", "padding", "background", "statusBar", "edge", "lock", "fps")

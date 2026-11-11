@@ -4,6 +4,83 @@ The most important changes in each release. The Play Store notes for a release
 are in `fastlane/metadata/android/en-US/changelogs/<versionCode>.txt`.
 Dates are when the build was uploaded to Play.
 
+## 1.2.0 (versionCode 35) – 2026-11-10
+
+- Owl 21: `android.motion` gives the phone's tilt from the gyroscope and accelerometer, and
+  `every frame { }` runs each frame with `dt`. New example apps: space bounce, a tilt-to-fly
+  arena shooter, and sky raid, a pixel-art plane shooter over five stages.
+- Voice: the orb is a glossy blob in shades of its colour whose edge moves while it listens,
+  speaks or works, more as you talk louder. Replies use the text-to-speech engine picked in
+  Android's settings without a launcher restart, and voice settings say which voice the default
+  is, like "default (Germany)".
+- Linux no longer looks uninstalled after the launcher restarts: the old /tmp is deleted in the
+  background, and while Linux starts, settings and the Linux screen say checking.
+- Fixes: a widget Shader whose loops take over 1000 turns a pixel isn't drawn (the store review
+  turns it away), so it can't freeze the screen; past 256 Wayland clients at once new ones are
+  turned away, so a runaway Linux program can't run the launcher out of memory.
+
+## 1.1.0 (versionCode 34) – 2026-11-10
+
+- Linux commands under proot run 2-30x faster: proot keeps itself and processes making many
+  syscalls on one fast CPU. The Linux screen has a switch for it, on by default, for phones or
+  programs that do better without it.
+- Apps with notifications show a dot on their icon, on home, on folders and in the drawer;
+  Android's own dot settings decide, and it needs notification access. Owl 20: `dot` on the
+  apps of `android.drawer` (#239).
+- The terminal's input can be a normal text field, on by default, so the keyboard's suggestions,
+  glide typing, dictation and clipboard work there: `terminal.keyboard-suggestions`, also in
+  style › terminal (#271). Tapping a suggestion that changes letters already typed corrects the
+  word (#251).
+- Foldables: home stays upright on a cover screen, and the cover and unfolded inner screens can
+  have layouts of their own, as `[cover]` and `[unfolded]` sections in layout.toml (#256, #257,
+  #259).
+- Fixes: turning a phone sideways no longer sends home back to page 1; a notification whose
+  extras can't be read and a layout.toml tile placed past its own columns no longer crash the
+  launcher.
+
+## 1.0.0 (versionCode 33) – 2026-11-08
+
+- Phone folders: folders picked in Android's folder picker at the top of the permissions
+  screen show in Files, where their files can be opened, shared, renamed,
+  deleted and copied or moved to and from Linux; agents reach them with `omalauncher folders`,
+  `ls`, `get` and `put`, and `omalauncher pick` opens Android's file picker. No storage
+  permission: on Android 11+ Linux also has /sdcard, with the files it saved there itself, so
+  what it puts in Download or Documents other apps see.
+- Settings has a permissions screen listing each permission, whether it's on and what uses it.
+- The `phone` command is `omalauncher` now (`phone` still works), with exit codes that say why
+  there is no answer, and more commands: `notify` (a phone notification on its own
+  "agents and scripts" channel), `share` (Android's share sheet for Linux files), `battery`,
+  `version`, and the phone folder commands. It answers in about 35 ms rather than 170.
+- Linux follows the phone's DNS servers, a VPN's included, so tailnet and LAN names resolve;
+  8.8.8.8 and 1.1.1.1 stay the fallback. An edited resolv.conf is left alone.
+- Owl 19: `fps:` says how many frames a second a widget's animation needs; koi, the owl and the
+  controls panel run at 10 to 30 rather than 60, which saves battery while home shows.
+- Home can open on any page, a face too: `home.home-page` in style.toml (#270, #225).
+- Claude Code no longer warns about cross-session messaging on every start in Linux.
+- Fixes: an exited terminal tile stays stopped until tapped (#130); a widget's notification no
+  longer replaces one from before the launcher restarted; an agent whose install finishes
+  after the agents screen closed shows up right away; Voice keeps its log in ~/.cache.
+
+## 0.20.0 (versionCode 31) – 2026-11-05
+
+- Omarchy 4.5: themes and configs come from v4.5.0. Jade Horse and Starship join the themes
+  and Osaka Jade leaves them; whoever has it picked keeps it. The boot intro videos stay out
+  of the download.
+- Coding agents: Qwen Code, MiniMax Code, Kiro CLI, Kilo, Devin CLI, Amp and Command Code, as
+  in Omarchy 4.5's agent list. Voice talks to all of them but Amp (which has no ACP) over ACP,
+  and to Antigravity (`agy acp`) too.
+- Agents install one at a time, as two at once failed on mise's lock; a second one waits
+  ("waiting…"). Removing an agent that's running stops Voice's copy first, or says to close
+  it, instead of seeming to do nothing.
+- Agents and scripts in Linux can ask for the phone's location, calendar and AirPods with
+  `phone location`, `phone calendar [days]` and `phone airpods [control [value]]`, as far as
+  the launcher was already allowed them; nothing asks for a permission. AGENTS.md tells
+  agents what system they're in (Arch under proot, no systemd, pacman/yay and mise, what
+  opens where). `x-www-browser` opens links in Android's browser.
+- Voice does less work while it talks: only the conversation redraws, and the orb animates
+  only while it shows.
+- Fixes: an agent queued to install no longer stays "waiting…" after the Agents screen closes.
+
 ## 0.19.0 (versionCode 30) – 2026-11-04
 
 - Browser tiles: a widget or face can show a web page in a tile of its own, drawn by
@@ -123,9 +200,6 @@ Dates are when the build was uploaded to Play.
 
 ## 0.14.0 (versionCode 25) – 2026-10-27
 
-- Hermes, Nous Research's agent, is one of the coding agents the launcher installs
-  and opens: from PyPI with mise (which now bootstraps uv for it), in a window of its
-  own, with its logo, in the app drawer and in recent apps.
 - Removing a coding agent now clears the agent from its row at once: mise leaves the
   tool's shim behind, which is what the row read as "installed", so it kept offering
   open and remove for an agent Linux no longer had.

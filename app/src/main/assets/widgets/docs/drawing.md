@@ -36,7 +36,11 @@ Styles: `fill:` (a color or gradient), `stroke:`, `width:` (stroke width),
 the foreground. A widget that reads `time` animates while it's on screen, up to
 60 frames a second on any screen, and only while it reads it: a `time` under an `if` that's false, like a
 backdrop drawn only while music plays, costs nothing (older launchers
-animate whenever `time` appears at all).
+animate whenever `time` appears at all). Each frame costs battery for as long as the page shows, so say how many
+the animation needs with `fps:` (owl 19, see docs/declarations.md): `fps: 10` for a pet that blinks and breathes,
+`fps: tapped ? 30 : 10` for one that hops after a tap. Move things by `time`, not by counting frames, so they keep
+their speed at any rate. A game whose things move by their speed, bounce and collide keeps them in states and
+moves them in `every frame` by `dt` (owl 21, see Triggers in docs/declarations.md, and `examples/space-bounce`).
 
 ## Shader
 
@@ -59,3 +63,11 @@ Shader {
   """
 }
 ```
+
+The code runs for every pixel of every frame, so keep its loops small: a pixel
+may take at most 1000 loop turns, counting a loop inside another as the outer
+loop's turns times the inner one's, and a call to your own function as that
+function's turns: a loop of 16 turns inside one of 8 takes 128. Over that, the shader
+isn't drawn (the tile shows `fallback`), the widget's error says how many it
+took, and the store won't take it. Count with fixed numbers or a `const`:
+`for (int i = 0; i < 8; i++)` or `i < STEPS` after `const int STEPS = 8;`.

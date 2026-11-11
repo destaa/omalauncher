@@ -27,7 +27,7 @@ class Compiler private constructor(
          * instead of failing on what they don't know. Bump it with every
          * addition a widget could depend on: nodes, properties, builtins.
          */
-        const val LEVEL = 18
+        const val LEVEL = 21
         private const val MAX_ASSET_BYTES = 2 shl 20
 
         /** Pages as far out as a file can ask for; past Int's range, the pages either side of them would wrap. */
@@ -63,6 +63,9 @@ class Compiler private constructor(
 
         /** Each Browser is a web view of its own: a tile has room for two. */
         private const val MAX_BROWSERS = 2
+
+        /** Texts [shaderTexts] gives at most for one Shader: a few picked between, not every combination of many. */
+        private const val MAX_SHADER_TEXTS = 64
 
         private val TIME_WORD = Regex("""\btime\b""")
 
@@ -236,6 +239,8 @@ class Compiler private constructor(
     private var animated = false
     private var terminal = false
     private var browser = false
+    /** Each text a Shader's code can be, null for one worked out while the widget runs. */
+    private val shaders = ArrayList<String?>()
 
     /** Browsers so far, against [MAX_BROWSERS]. */
     private var browsers = 0
@@ -380,6 +385,7 @@ class Compiler private constructor(
                 since(HOME_LOCK, p.pos)
                 ex(p.value, root).also { if (it.const != null) fail("lock holds the home screen still while what it says is true, so it's something that changes, like lock: playing, not a fixed value", p.pos) }
             }
+        val fps = props["fps"]?.let(::frameRate)
         // Drawn under the status bar and a camera cutout: fixed in the file, since the whole face moves when it changes.
         val edge =
             props["edge"]?.let { p ->
@@ -395,6 +401,7 @@ class Compiler private constructor(
             size = props["size"]?.let { cells(it) },
             statusBar = statusBar,
             lock = lock,
+            fps = fps,
             edge = edge,
             kind = ast.kind,
             minSize = props["minSize"]?.let { cells(it) } ?: (1 to 1),
@@ -418,6 +425,7 @@ class Compiler private constructor(
             animated = animated,
             terminal = terminal,
             browser = browser,
+            shaders = shaders,
             nodeCount = tileNodes,
         )
     }
@@ -427,6 +435,19 @@ class Compiler private constructor(
     private fun finish(level: Int) {
         needs?.let { (v, feature, pos) -> if (level < v) fail("$feature needs owl $v: add meta { owl: $v }", pos) }
         webAt?.let { if (!browser) fail("web(...) steers this file's Browser, and it has none: add Browser { url: \"https://host/page\" }", it) }
+    }
+
+    /**
+     * `fps:`, how many frames a second the file's `time` animation needs, read as it changes: a pet that only
+     * blinks and breathes needs a few, and its hop after a tap more. A fixed number is checked here; one worked out
+     * as it runs is kept from 1 to [MAX_FPS] (see Program.fps).
+     */
+    private fun frameRate(p: Prop): Ev {
+        since(FRAME_RATE, p.pos)
+        val e = ex(p.value, root)
+        val c = e.const
+        if (c != null && (c !is Num || c.v < 1 || c.v > MAX_FPS)) fail("fps is a number of frames a second, from 1 to $MAX_FPS, like fps: 10 or fps: playing ? 30 : 10", p.pos)
+        return e
     }
 
     /**
@@ -442,7 +463,7 @@ class Compiler private constructor(
         triggers: List<Trigger>,
     ): Program {
         since("app \"…\" { }", 0)
-        for (p in body.props) if (p.name !in setOf("title", "icon", "back", "edge", "statusBar")) fail("an app only takes title, icon, back, edge and statusBar (no size or page: it isn't a tile)", p.pos)
+        for (p in body.props) if (p.name !in setOf("title", "icon", "back", "edge", "statusBar", "fps")) fail("an app only takes title, icon, back, edge, statusBar and fps (no size or page: it isn't a tile)", p.pos)
         // Whether the status bar stays over the app, read as it changes, as on a face.
         val statusBar = body.props.firstOrNull { it.name == "statusBar" }?.let { since(APP_STATUS_BAR, it.pos); ex(it.value, root) }
         // Drawn under the navigation bar: fixed in the file, since the whole view moves when it changes.
@@ -483,6 +504,7 @@ class Compiler private constructor(
         val title = body.props.firstOrNull { it.name == "title" }?.let { ex(it.value, root) }
         val back = backProp?.let { ex(it.value, root) }
         val onBack = onBackHandler?.let { handler(it, root) }
+        val fps = body.props.firstOrNull { it.name == "fps" }?.let(::frameRate)
         finish(level)
         return Program(
             name = ast.name ?: "app",
@@ -495,6 +517,7 @@ class Compiler private constructor(
             onBack = onBack,
             edge = edge,
             statusBar = statusBar,
+            fps = fps,
             triggers = triggers,
             commands = commands.toList(),
             secretHosts = secretHosts.mapValues { it.value.sorted() },
@@ -505,6 +528,7 @@ class Compiler private constructor(
             animated = animated,
             terminal = terminal,
             browser = browser,
+            shaders = shaders,
             nodeCount = nodes,
             kind = ast.kind,
             icon = icon,
@@ -526,8 +550,8 @@ class Compiler private constructor(
         triggers: List<Trigger>,
     ): Program {
         since(PANEL_FILE, 0)
-        body.props.firstOrNull { it.name != "enter" && it.name != "opacity" && it.name != "keyboard" }?.let {
-            fail("a panel only takes enter (what the prompt bar says Enter does), opacity (how much it covers home) and keyboard (whether the keyboard comes up as it opens); the launcher frames it, and gesture settings pick which swipe opens it", it.pos)
+        body.props.firstOrNull { it.name !in setOf("enter", "opacity", "keyboard", "fps") }?.let {
+            fail("a panel only takes enter (what the prompt bar says Enter does), opacity (how much it covers home), keyboard (whether the keyboard comes up as it opens) and fps (how often it animates); the launcher frames it, and gesture settings pick which swipe opens it", it.pos)
         }
         body.handlers.firstOrNull { it.name != "onSubmit" && it.name != "onKey" }?.let {
             fail("handlers go on the nodes inside a panel; only onSubmit (Enter in the prompt bar) and onKey (its arrow and Tab keys) go at its top", it.pos)
@@ -557,6 +581,7 @@ class Compiler private constructor(
                 since(PANEL_KEYBOARD, it.pos)
                 ((it.value as? Expr.Lit)?.value as? Bool)?.v ?: fail("keyboard is true or false, not an expression", it.pos)
             } ?: true
+        val fps = body.props.firstOrNull { it.name == "fps" }?.let(::frameRate)
         finish(level)
         return Program(
             name = ast.name ?: "panel",
@@ -569,6 +594,7 @@ class Compiler private constructor(
             enter = enter,
             opacity = opacity,
             keyboard = keyboard,
+            fps = fps,
             triggers = triggers,
             commands = commands.toList(),
             secretHosts = secretHosts.mapValues { it.value.sorted() },
@@ -828,6 +854,24 @@ class Compiler private constructor(
         return if (c is Str || c is Num) c.toString() else null
     }
 
+    /**
+     * Every text a Shader's code can be, when each is fixed: a literal or a top-level let (`code: print`), joined
+     * (`lib + city`) or picked (`night ? dark : day`); null when any is worked out while the widget runs.
+     */
+    private fun shaderTexts(
+        e: Expr,
+        s: Scope,
+    ): List<String>? =
+        when {
+            e is Expr.Cond -> (shaderTexts(e.a, s) ?: return null) + (shaderTexts(e.b, s) ?: return null)
+            e is Expr.Binary && e.op == "+" -> {
+                val a = shaderTexts(e.a, s) ?: return null
+                val b = shaderTexts(e.b, s) ?: return null
+                a.flatMap { x -> b.map { x + it } }.take(MAX_SHADER_TEXTS)
+            }
+            else -> constText(e, s)?.let(::listOf)
+        }
+
     private fun constant(
         e: Expr,
         what: String,
@@ -906,6 +950,7 @@ class Compiler private constructor(
                 if (e.name == "location") commands += "read the phone's approximate location, once you allow it"
                 if (e.name == "calendar") commands += "read events in the phone's calendars, once you allow it"
                 if (e.name == "airpods") commands += AIRPODS_COMMAND
+                if (e.name == "motion") commands += "read how the phone is tilted while it shows"
                 Global.Source(d.name, "android.${e.name}", null, (every ?: 60.0).coerceAtLeast(1.0), false, 0)
             }
             else -> fail("a source is cmd(\"...\"), stream(\"...\"), http(\"...\"), file(\"...\"), clock, or android.${ANDROID.joinToString("/")}", e.pos)
@@ -1004,9 +1049,15 @@ class Compiler private constructor(
 
     private fun trigger(d: Decl.Trigger): Trigger {
         since(d.kind, d.pos)
+        if (d.kind == "every" && (d.expr as? Expr.Name)?.name == "frame") {
+            since(EVERY_FRAME, d.pos)
+            // Run by the frame clock, which only runs for an animated widget.
+            animated = true
+            return Trigger(TriggerKind.FRAME, Ev.of(Null), handler(Handler(d.kind, d.stmts, d.pos), root, listOf("dt")), d.pos)
+        }
         val expr =
             if (d.kind == "every") {
-                val seconds = constant(d.expr, "every").num() ?: fail("every takes an interval, like every 10s { ... }", d.expr.pos)
+                val seconds = constant(d.expr, "every").num() ?: fail("every takes an interval, like every 10s { ... }, or frame: every frame { ... }", d.expr.pos)
                 if (!(seconds >= 1)) fail("every runs at most once a second", d.expr.pos)
                 Ev.of(Num(seconds))
             } else {
@@ -1231,6 +1282,7 @@ class Compiler private constructor(
         // A shader animates only if its code reads `time`; code that's worked out at run time might.
         if (n.type == "Shader") {
             val code = props["code"]?.const
+            body.props.firstOrNull { it.name == "code" }?.let { p -> shaders += shaderTexts(p.value, scope) ?: listOf(null) }
             if (code == null || shaderReadsTime(code.toString())) animated = true
         }
         if (kind.children == Children.NONE && body.items.isNotEmpty()) fail("${n.type} can't hold other nodes", body.items[0].pos)
