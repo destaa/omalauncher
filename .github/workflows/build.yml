@@ -18,7 +18,14 @@ jobs:
           sudo apt-get update -q && sudo apt-get install -yq libarchive-tools
           # The NDK the script builds proot with, as upstream's release.yml installs it.
           ndk=$(sed -n 's/^NDK_VERSION=//p' scripts/fetch-proot.sh)
-          [ -d "$ANDROID_HOME/ndk/$ndk" ] || yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;$ndk" >/dev/null
+          echo "NDK=$ndk ANDROID_HOME=$ANDROID_HOME"
+          if [ ! -d "$ANDROID_HOME/ndk/$ndk" ]; then
+            yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;$ndk" || {
+              echo "sdkmanager failed; installed NDKs:" >&2
+              ls "$ANDROID_HOME/ndk" 2>&1 >&2
+              exit 1
+            }
+          fi
           scripts/fetch-proot.sh
       - name: Grant execute permission
         run: chmod +x gradlew
