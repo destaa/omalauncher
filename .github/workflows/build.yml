@@ -42,7 +42,13 @@ jobs:
               exit 1
             }
           fi
-          scripts/fetch-proot.sh
+          # Its output, so a failure shows in the annotations rather than only in the job log.
+          scripts/fetch-proot.sh 2>&1 | tee "$RUNNER_TEMP/proot.log"
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            tail -n 25 "$RUNNER_TEMP/proot.log" | while IFS= read -r line; do echo "::error title=fetch-proot.sh::$line"; done
+            exit "$status"
+          fi
       - name: Grant execute permission
         run: chmod +x gradlew
       # Signed with the phone's own key (repo secrets: KEYSTORE_B64, KEYSTORE_PASSWORD, KEY_ALIAS,
