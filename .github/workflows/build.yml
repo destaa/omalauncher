@@ -15,8 +15,11 @@ jobs:
         uses: android-actions/setup-android@v4
       - name: Install bsdtar & fetch proot
         run: |
-          sudo apt-get update && sudo apt-get install -y libarchive-tools
-          ./scripts/fetch-proot.sh
+          sudo apt-get update -q && sudo apt-get install -yq libarchive-tools
+          # The NDK the script builds proot with, as upstream's release.yml installs it.
+          ndk=$(sed -n 's/^NDK_VERSION=//p' scripts/fetch-proot.sh)
+          [ -d "$ANDROID_HOME/ndk/$ndk" ] || yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;$ndk" >/dev/null
+          scripts/fetch-proot.sh
       - name: Grant execute permission
         run: chmod +x gradlew
       # Signed with the phone's own key (repo secrets: KEYSTORE_B64, KEYSTORE_PASSWORD, KEY_ALIAS,
